@@ -399,6 +399,7 @@ function M.format_line_chunks(
 )
 	local chunks = {}
 	local first_line = line_idx == 1
+	local above_instead = ui_opts.above
 	local severity_suffix = SEVERITY_SUFFIXS[severity]
 
 	local function hls(extend_hl_groups)
@@ -417,7 +418,7 @@ function M.format_line_chunks(
 	local message_highlight = hls()
 
 	if should_under_line then
-		local arrow_symbol = (ui_opts.above and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
+		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
 		local space_offset = space(virt_text_offset)
 		if first_line then
 			if not removed_parts.arrow then
@@ -453,10 +454,10 @@ function M.format_line_chunks(
 		local tree_symbol = "   "
 		if first_line then
 			if not lasted_line then
-				tree_symbol = " ┌ "
+				tree_symbol = above_instead and " └ " or " ┌ "
 			end
 		elseif lasted_line then
-			tree_symbol = " └ "
+			tree_symbol = above_instead and " ┌ " or " └ "
 		else
 			tree_symbol = " │ "
 		end
