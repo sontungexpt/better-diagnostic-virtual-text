@@ -573,41 +573,72 @@ end
 --- @return table The list of virtual lines.
 local function generate_virtual_texts(opts, diagnostic)
 	local ui = opts.ui
-	local should_under_line, offset, wrap_length, removed_parts = evaluate_extmark(ui)
+	local should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui)
 	local msgs, size = wrap_text(diagnostic.message, wrap_length)
 	if size == 0 then
 		return {}, {}
 	end
 
 	local severity = diagnostic.severity
+	local above_instead = ui.above
 
 	local virt_lines = {}
 
-	local virt_text =
-		M.format_line_chunks(ui, 1, msgs[1], severity, wrap_length, size == 1, offset, should_under_line, removed_parts)
-	if should_under_line then
+	local initial_idx = above_instead and size or 1
+
+	local virt_text = M.format_line_chunks(
+		ui,
+		1,
+		msgs[initial_idx],
+		severity,
+		wrap_length,
+		size == 1,
+		offset,
+		should_display_below,
+		removed_parts
+	)
+	if should_display_below then
 		if size == 1 then
 			return {}, { virt_text }
 		end
-		tbl_insert(virt_lines, virt_text)
+		virt_lines[initial_idx] = virt_text
 		virt_text = {}
 	end
 
-	for i = 2, size do
-		tbl_insert(
-			virt_lines,
-			M.format_line_chunks(
-				ui,
-				i,
-				msgs[i],
-				severity,
-				wrap_length,
-				i == size,
-				offset,
-				should_under_line,
-				removed_parts
+	if above_instead then
+		for i = 1, size - 1 do -- -1 for virt_text
+			tbl_insert(
+				virt_lines,
+				M.format_line_chunks(
+					ui,
+					size - i + 1,
+					msgs[i],
+					severity,
+					wrap_length,
+					i == 1,
+					offset,
+					should_display_below,
+					removed_parts
+				)
 			)
-		)
+		end
+	else
+		for i = 2, size do -- start from 2 for virt_text
+			tbl_insert(
+				virt_lines,
+				M.format_line_chunks(
+					ui,
+					i,
+					msgs[i],
+					severity,
+					wrap_length,
+					i == size,
+					offset,
+					should_display_below,
+					removed_parts
+				)
+			)
+		end
 	end
 
 	return virt_text, virt_lines
