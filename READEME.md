@@ -100,11 +100,12 @@ virt_text_offset,
 should_under_line,
 removed_parts
 )
-    -- your custom logic here
+    -- replace with your logic to get chunks for each line
 
     -- default logic
 	local chunks = {}
 	local first_line = line_idx == 1
+	local above_instead = ui_opts.above
 	local severity_suffix = SEVERITY_SUFFIXS[severity]
 
 	local function hls(extend_hl_groups)
@@ -123,7 +124,7 @@ removed_parts
 	local message_highlight = hls()
 
 	if should_under_line then
-		local arrow_symbol = ui_opts.up_arrow:gsub("^%s*", "")
+		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
 		local space_offset = space(virt_text_offset)
 		if first_line then
 			if not removed_parts.arrow then
@@ -159,10 +160,10 @@ removed_parts
 		local tree_symbol = "   "
 		if first_line then
 			if not lasted_line then
-				tree_symbol = " ┌ "
+				tree_symbol = above_instead and " └ " or " ┌ "
 			end
 		elseif lasted_line then
-			tree_symbol = " └ "
+			tree_symbol = above_instead and " ┌ " or " └ "
 		else
 			tree_symbol = " │ "
 		end
@@ -180,7 +181,6 @@ removed_parts
 	end
 
 	return chunks
-
 end
 
 ```
