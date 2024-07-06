@@ -2,7 +2,7 @@ local vim, type, pairs, ipairs = vim, type, pairs, ipairs
 local api, fn, diag = vim.api, vim.fn, vim.diagnostic
 local autocmd, augroup, strdisplaywidth, get_cursor, tbl_insert =
 	api.nvim_create_autocmd, api.nvim_create_augroup, fn.strdisplaywidth, api.nvim_win_get_cursor, table.insert
-local ns = api.nvim_create_namespace("stinvim-better-diagnostic-virtual-text")
+local ns = api.nvim_create_namespace("better-diagnostic-virtual-text")
 
 local SEVERITY_SUFFIXS = { "Error", "Warn", "Info", "Hint" }
 local TAB_LENGTH = strdisplaywidth("\t")
