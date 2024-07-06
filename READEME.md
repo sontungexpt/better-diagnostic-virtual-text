@@ -65,7 +65,7 @@ UI will has 4 parts: arrow, left_kept_space, message, right_kept_space orders:
 
 | arrow | left_kept_space | message | right_kept_space |
 
-Ovveride this function before setup the plugin.
+Override this function before setup the plugin.
 
 ```lua
 
@@ -101,6 +101,85 @@ should_under_line,
 removed_parts
 )
     -- your custom logic here
+
+    -- default logic
+	local chunks = {}
+	local first_line = line_idx == 1
+	local severity_suffix = SEVERITY_SUFFIXS[severity]
+
+	local function hls(extend_hl_groups)
+		local default_groups = {
+			"DiagnosticVirtualText" .. severity_suffix,
+			"BetterDiagnosticVirtualText" .. severity_suffix,
+		}
+		if extend_hl_groups then
+			for i, hl in ipairs(extend_hl_groups) do
+				default_groups[2 + i] = hl
+			end
+		end
+		return default_groups
+	end
+
+	local message_highlight = hls()
+
+	if should_under_line then
+		local arrow_symbol = ui_opts.up_arrow:gsub("^%s*", "")
+		local space_offset = space(virt_text_offset)
+		if first_line then
+			if not removed_parts.arrow then
+				tbl_insert(chunks, {
+					space_offset .. arrow_symbol,
+					hls({ "BetterDiagnosticVirtualTextArrow", "BetterDiagnosticVirtualTextArrow" .. severity_suffix }),
+				})
+			end
+		else
+			tbl_insert(chunks, {
+				space_offset .. space(strdisplaywidth(arrow_symbol)),
+				message_highlight,
+			})
+		end
+	else
+		local arrow_symbol = ui_opts.arrow
+		if first_line then
+			if not removed_parts.arrow then
+				tbl_insert(chunks, {
+					arrow_symbol,
+					hls({ "BetterDiagnosticVirtualTextArrow", "BetterDiagnosticVirtualTextArrow" .. severity_suffix }),
+				})
+			end
+		else
+			tbl_insert(chunks, {
+				space(virt_text_offset + strdisplaywidth(arrow_symbol)),
+				message_highlight,
+			})
+		end
+	end
+
+	if not removed_parts.left_kept_space then
+		local tree_symbol = "   "
+		if first_line then
+			if not lasted_line then
+				tree_symbol = " ┌ "
+			end
+		elseif lasted_line then
+			tree_symbol = " └ "
+		else
+			tree_symbol = " │ "
+		end
+		tbl_insert(chunks, {
+			tree_symbol,
+			hls({ "BetterDiagnosticVirtualTextTree", "BetterDiagnosticVirtualTextTree" .. severity_suffix }),
+		})
+	end
+
+	tbl_insert(chunks, { line_msg, message_highlight })
+
+	if not removed_parts.right_kept_space then
+		local last_space = space(max_line_length - strdisplaywidth(line_msg) + ui_opts.right_kept_space)
+		tbl_insert(chunks, { last_space, message_highlight })
+	end
+
+	return chunks
 
 end
 
