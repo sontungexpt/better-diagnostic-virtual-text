@@ -28,6 +28,7 @@ local default_options = {
 		right_kept_space = 3, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
 		arrow = "  ",
 		up_arrow = "  ",
+		above = false,
 	},
 	inline = true,
 }
@@ -680,6 +681,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)
 		id = virtline + 1,
 		virt_text = virt_text,
 		virt_lines = virt_lines,
+		virt_lines_above = opts.ui.above,
 		virt_text_pos = "eol",
 		line_hl_group = "CursorLine",
 	})
@@ -740,7 +742,7 @@ end
 
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
-function M.setup(bufnr, opts)
+function M.setup_buf(bufnr, opts)
 	if buffers_attached[bufnr] then
 		return
 	end
@@ -828,7 +830,7 @@ function M.setup(bufnr, opts)
 		group = autocmd_group,
 		buffer = bufnr,
 		---@diagnostic disable-next-line: redefined-local
-		callback = function(args)
+		callback = function()
 			if buffers_disabled[bufnr] then
 				return
 			end
@@ -939,16 +941,6 @@ function M.setup(bufnr, opts)
 	})
 end
 
-if not vim.g.loaded_better_diagnostic_virtual_text then
-	autocmd("LspAttach", {
-		nested = true,
-		callback = function(args)
-			M.setup(args.buf)
-		end,
-	})
-	vim.g.loaded_better_diagnostic_virtual_text = true
-end
-
 if not vim.g.loaded_better_diagnostic_virtual_text_toggle then
 	-- overwrite diagnostic.enable
 	local raw_enable = diag.enable
@@ -981,6 +973,15 @@ if not vim.g.loaded_better_diagnostic_virtual_text_toggle then
 	end
 
 	vim.g.loaded_better_diagnostic_virtual_text_toggle = true
+end
+
+function M.setup(opts)
+	autocmd("LspAttach", {
+		nested = true,
+		callback = function(args)
+			M.setup_buf(args.buf, opts)
+		end,
+	})
 end
 
 return M
