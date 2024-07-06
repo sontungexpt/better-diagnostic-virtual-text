@@ -4,6 +4,7 @@ A Neovim plugin for enhanced diagnostic virtual text display, aiming to provide 
 
 Note: document is not enough.
 
+
 ## Features
 
 - **Ease of Use**: Simple setup and configuration.
@@ -26,7 +27,7 @@ Add the following to your `init.lua` or `init.vim`:
 ```
 
 ## Preview
-
+https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 ## License
 
 MIT[License]
