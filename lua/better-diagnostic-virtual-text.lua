@@ -28,6 +28,7 @@ local default_options = {
 		right_kept_space = 3, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
 		arrow = "  ",
 		up_arrow = "  ",
+		down_arrow = "  ",
 		above = false,
 	},
 	inline = true,
@@ -416,7 +417,7 @@ function M.format_line_chunks(
 	local message_highlight = hls()
 
 	if should_under_line then
-		local arrow_symbol = ui_opts.up_arrow:gsub("^%s*", "")
+		local arrow_symbol = (ui_opts.above and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
 		local space_offset = space(virt_text_offset)
 		if first_line then
 			if not removed_parts.arrow then
