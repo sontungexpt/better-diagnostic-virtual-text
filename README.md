@@ -2,8 +2,6 @@
 
 A Neovim plugin for enhanced diagnostic virtual text display, aiming to provide better performance and customization options.
 
-Note: document is not enough.
-
 ## Features
 
 - **Ease of Use**: Simple setup and configuration.
