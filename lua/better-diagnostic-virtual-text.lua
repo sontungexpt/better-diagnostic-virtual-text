@@ -188,6 +188,7 @@ do
 	})
 end
 
+--- This function is used to inspect the diagnostics cache for debug
 function M.inspect_cache()
 	vim.schedule(function()
 		vim.notify(vim.inspect(diagnostics_cache.inspect()), vim.log.levels.INFO, { title = "Diagnostics Cache" })
@@ -848,6 +849,15 @@ function M.setup_buf(bufnr, opts)
 		M.clean_diagnostics(bufnr, lines_or_diagnostic)
 	end
 
+	local function disable()
+		prev_line = 1 -- The previous line that cursor was on.
+		text_changing = false
+		prev_cursor_diagnostic = nil
+		lines_count_changed = false
+		prev_diag_changed_trigger_line = -1
+		clean_diagnostics(true)
+	end
+
 	local function show_diagnostic(diagnostic)
 		if diagnostic then
 			M.show_diagnostic(opts, bufnr, diagnostic) -- re-render last shown diagnostic
@@ -1013,8 +1023,7 @@ function M.setup_buf(bufnr, opts)
 						show_diagnostics(current_line, current_col)
 					end
 				else
-					prev_cursor_diagnostic = nil
-					clean_diagnostics(true)
+					disable()
 				end
 			end
 		end,
