@@ -1,8 +1,6 @@
----@diagnostic disable: redundant-return-value
-local vim, type, pairs, ipairs = vim, type, pairs, ipairs
+local vim, type, ipairs = vim, type, ipairs
 local api, fn, diag = vim.api, vim.fn, vim.diagnostic
-local autocmd, augroup, strdisplaywidth, get_cursor, tbl_insert =
-	api.nvim_create_autocmd, api.nvim_create_augroup, fn.strdisplaywidth, api.nvim_win_get_cursor, table.insert
+local autocmd, strdisplaywidth, tbl_insert = api.nvim_create_autocmd, fn.strdisplaywidth, table.insert
 local ns = api.nvim_create_namespace("better-diagnostic-virtual-text")
 
 local SEVERITY_SUFFIXS = { "Error", "Warn", "Info", "Hint" }
@@ -43,6 +41,15 @@ local diagnostics_cache = {}
 do
 	local real_diagnostics_cache = {}
 
+	--- This function is used to inspect the diagnostics cache for debug
+	function diagnostics_cache.inspect()
+		local clone_table = {}
+		for bufnr, diagnostics in pairs(real_diagnostics_cache) do
+			clone_table[bufnr] = diagnostics.inspect()
+		end
+		return clone_table
+	end
+
 	function diagnostics_cache.exist(bufnr)
 		return real_diagnostics_cache[bufnr] ~= nil
 	end
@@ -81,9 +88,15 @@ do
 			else
 				local lines = {}
 				local proxy_table = {}
+
+				-- This function is used to inspect the diagnostics cache for debug
+				function proxy_table.inspect()
+					return lines
+				end
+
 				real_diagnostics_cache[bufnr] = setmetatable(proxy_table, {
-					---@diagnostic disable-next-line: redundant-return-value
 					__pairs = function(_)
+						---@diagnostic disable: redundant-return-value
 						return pairs(lines)
 					end,
 
@@ -95,33 +108,40 @@ do
 					--- @param line integer The lnum of the diagnostic being tracked in 1-based index. It's also the line where the diagnostic is located in the buffer
 					--- @param diagnostic table The diagnostic being tracked
 					__newindex = function(t, line, diagnostic)
-						if diagnostic == nil or not next(diagnostic) then -- untrack this line if nil or empty table
-							local line_value = lines[line]
-							if line_value then
-								lines[line] = nil
-								line_value[0] = nil -- make sure never loop over this key
-								for _, d in pairs(line_value) do
-									local lnum = d.lnum + 1
-									local line_lnum_value = lines[lnum]
-									if line_lnum_value and line_lnum_value[d] and line_lnum_value[0] > 1 then
-										line_lnum_value[d] = nil
-										line_lnum_value[0] = line_lnum_value[0] - 1
-									else
-										lines[lnum] = nil
+						if diagnostic == nil or not next(diagnostic) then
+							-- Untrack this line if `diagnostic` is nil or an empty table.
+							local line_diags = lines[line]
+							if line_diags then
+								for _, d in meta_pairs(line_diags) do
+									local lnum, end_lnum = d.lnum + 1, d.end_lnum + 1
+									-- The line is the original line of the diagnostic so we need to remove all related lines
+									-- If not the diagnostic still exists and should not be removed
+									if line == lnum then
+										for i = lnum, end_lnum do
+											local line_i_diags = lines[i]
+											if line_i_diags and line_i_diags[d] and line_i_diags[0] > 1 then
+												line_i_diags[d] = nil
+												line_i_diags[0] = line_i_diags[0] - 1
+											else
+												lines[i] = nil
+											end
+										end
 									end
 								end
 							end
-						elseif type(diagnostic[1]) == "table" then -- track multiple diagnostics
+						elseif type(diagnostic[1]) == "table" then
+							-- Replace the line with the new diagnostics
 							t[line] = nil -- call the __newindex in case nil
 							for _, d in ipairs(diagnostic) do
 								t[d.lnum + 1] = d -- call the __newindex in case track diagnostic
 							end
-						elseif diagnostic.end_lnum then -- make sure the diagnostic is not an empty table
+						elseif diagnostic.end_lnum then
+							-- Ensure the diagnostic is not an empty table.
 							local end_lnum = diagnostic.end_lnum + 1 -- change to 1-based
 							for i = line, end_lnum do
-								local line_value = lines[i]
-								if not line_value then
-									lines[line] = setmetatable({
+								local line_i_diags = lines[i]
+								if not line_i_diags then
+									lines[i] = setmetatable({
 										[0] = 1,
 										[diagnostic] = diagnostic,
 									}, {
@@ -138,9 +158,9 @@ do
 											end
 										end,
 									})
-								elseif not line_value[diagnostic] then
-									line_value[diagnostic] = diagnostic
-									line_value[0] = line_value[0] + 1
+								elseif not line_i_diags[diagnostic] then
+									line_i_diags[diagnostic] = diagnostic
+									line_i_diags[0] = line_i_diags[0] + 1
 								end
 							end
 						end
@@ -168,12 +188,27 @@ do
 	})
 end
 
+function M.inspect_cache()
+	vim.schedule(function()
+		vim.notify(vim.inspect(diagnostics_cache.inspect()), vim.log.levels.INFO, { title = "Diagnostics Cache" })
+	end)
+end
+
 --- Updates the diagnostics cache
 --- @param bufnr integer The buffer number
 --- @param line integer The line number
 --- @param diagnostic table The new diagnostic to track or list of diagnostics in a line to update
 function M.update_diagnostics_cache(bufnr, line, diagnostic)
 	diagnostics_cache[bufnr][line] = diagnostic
+end
+
+--- Gets the cursor position in the buffer and returns the line and column numbers.
+--- @param bufnr integer The buffer number
+--- @return integer The line number
+--- @return integer The column number
+local function get_cursor(bufnr)
+	local cursor_pos = api.nvim_win_get_cursor(bufnr)
+	return cursor_pos[1], cursor_pos[2]
 end
 
 --- Wraps text into lines with maximum length
@@ -344,12 +379,12 @@ end
 --- @return integer The number of diagnostics in the line sorted by severity.
 function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, computed)
 	if type(current_line) ~= "number" then
-		current_line = get_cursor(0)[1]
+		current_line = api.nvim_win_get_cursor(0)[1]
 	end
 	local diagnostics, diagnostics_size = M.fetch_diagnostics(bufnr, current_line, computed)
 
 	if type(current_col) ~= "number" then
-		current_col = get_cursor(0)[2]
+		current_col = api.nvim_win_get_cursor(0)[2]
 	end
 	local cursor_diagnostics = {}
 	local cursor_diagnostics_size = 0
@@ -795,7 +830,7 @@ function M.setup_buf(bufnr, opts)
 		return
 	end
 
-	local autocmd_group = augroup(make_group_name(bufnr), { clear = true })
+	local autocmd_group = api.nvim_create_augroup(make_group_name(bufnr), { clear = true })
 	opts = opts and vim.tbl_deep_extend("force", default_options, opts) or default_options
 
 	local prev_line = 1 -- The previous line that cursor was on.
@@ -818,9 +853,9 @@ function M.setup_buf(bufnr, opts)
 		end
 	end
 
-	local function show_cursor_diagnostic(current_line, current_col, computed, clean_opts)
+	local function show_cursor_diagnostic(current_line, current_col, computed)
 		_, prev_cursor_diagnostic =
-			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, computed, clean_opts)
+			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, computed, prev_cursor_diagnostic)
 	end
 
 	local function exists_any_diagnostics(line)
@@ -853,17 +888,16 @@ function M.setup_buf(bufnr, opts)
 				return
 			end
 
-			local cursor_pos = get_cursor(0)
-			local current_line, current_col = cursor_pos[1], cursor_pos[2]
+			local current_line, current_col = get_cursor(0)
 
 			if not lines_count_changed and (text_changing or prev_diag_changed_trigger_line == current_line) then
-				show_cursor_diagnostic(current_line, current_col, true, prev_cursor_diagnostic)
+				show_cursor_diagnostic(current_line, current_col, true)
 			else
 				-- If text is not currently changing, it implies that the cursor moved before the diagnostics changed event.
 				-- Therefore, we need to update the diagnostics cache because multiple diagnostics across different lines may have changed simultaneously.
 				diagnostics_cache.update(bufnr, args.data.diagnostics)
 				if opts.inline then
-					show_cursor_diagnostic(current_line, current_col, false, prev_cursor_diagnostic)
+					show_cursor_diagnostic(current_line, current_col)
 				else
 					show_diagnostics(current_line, current_col)
 				end
@@ -889,8 +923,7 @@ function M.setup_buf(bufnr, opts)
 				return
 			end
 
-			local cursor_pos = get_cursor(0)
-			local current_line, current_col = cursor_pos[1], cursor_pos[2]
+			local current_line, current_col = get_cursor(0)
 
 			if exists_any_diagnostics(current_line) then
 				if current_line == prev_line then
@@ -904,7 +937,7 @@ function M.setup_buf(bufnr, opts)
 						show_cursor_diagnostic(current_line, current_col)
 					end
 				else
-					show_cursor_diagnostic(current_line, current_col, false, prev_cursor_diagnostic)
+					show_cursor_diagnostic(current_line, current_col)
 				end
 			elseif opts.inline then
 				clean_diagnostics(prev_cursor_diagnostic)
@@ -933,8 +966,7 @@ function M.setup_buf(bufnr, opts)
 					show_diagnostic(prev_cursor_diagnostic)
 				end
 			else
-				local cursor_pos = get_cursor(0)
-				local current_line, current_col = cursor_pos[1], cursor_pos[2]
+				local current_line, current_col = get_cursor(0)
 				show_diagnostics(current_line, current_col)
 			end
 		end,
@@ -957,9 +989,8 @@ function M.setup_buf(bufnr, opts)
 			text_changing = true
 			if last_line_changed ~= last_line_updated_range then -- added or removed line
 				lines_count_changed = true
-				local cursor_pos = get_cursor(0)
-				local current_line, current_col = cursor_pos[1], cursor_pos[2]
-				show_cursor_diagnostic(current_line, current_col, false, prev_cursor_diagnostic)
+				local current_line, current_col = get_cursor(0)
+				show_cursor_diagnostic(current_line, current_col)
 			elseif prev_cursor_diagnostic then
 				show_diagnostic(prev_cursor_diagnostic)
 			end
@@ -972,8 +1003,7 @@ function M.setup_buf(bufnr, opts)
 		callback = function(args)
 			if bufnr == args.data then
 				if args.match == "BetterDiagnosticVirtualTextEnabled" then
-					local cursor_pos = get_cursor(0)
-					local current_line, current_col = cursor_pos[1], cursor_pos[2]
+					local current_line, current_col = get_cursor(0)
 					if opts.inline then
 						if exists_any_diagnostics(current_line) then
 							show_cursor_diagnostic(current_line, current_col)
@@ -982,8 +1012,8 @@ function M.setup_buf(bufnr, opts)
 						show_diagnostics(current_line, current_col)
 					end
 				else
-					clean_diagnostics(true)
 					prev_cursor_diagnostic = nil
+					clean_diagnostics(true)
 				end
 			end
 		end,
@@ -996,14 +1026,10 @@ if not vim.g.loaded_better_diagnostic_virtual_text_toggle then
 	---@diagnostic disable-next-line: duplicate-set-field
 	diag.enable = function(enabled, filter)
 		raw_enable(enabled, filter)
-		local bufnr = filter and filter.bufnr
-		if not bufnr then
-			return
-		end
-		local bufnr_disabled = buffers_disabled[bufnr] == true
+		local bufnr = filter and filter.bufnr or api.nvim_get_current_buf()
 
 		if not enabled then
-			if not bufnr_disabled then -- already disabled
+			if not buffers_disabled[bufnr] then -- already disabled
 				buffers_disabled[bufnr] = true
 				api.nvim_exec_autocmds("User", {
 					pattern = "BetterDiagnosticVirtualTextDisabled",
@@ -1011,7 +1037,7 @@ if not vim.g.loaded_better_diagnostic_virtual_text_toggle then
 				})
 			end
 		else
-			if bufnr_disabled then
+			if buffers_disabled[bufnr] then
 				buffers_disabled[bufnr] = nil
 				api.nvim_exec_autocmds("User", {
 					pattern = "BetterDiagnosticVirtualTextEnabled",
