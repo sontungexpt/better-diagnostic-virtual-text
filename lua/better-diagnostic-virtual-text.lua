@@ -311,19 +311,50 @@ end
 
 --- Generates a string of spaces of the specified length.
 --- This function optimizes the process of generating a string of spaces by
---- checking if the length is divisible by numbers from 10 to 2, using precomputed
+--- checking if the length is divisible by numbers from 10 to 2.
 --- substrings to minimize the number of calls to `string.rep`.
 --- @param num number The total number of spaces to generate.
 --- @return string A string consisting of `num` spaces.
 local space = function(num)
-	local reps = { " ", "  ", "   ", "    ", "     ", "      ", "       ", "        ", "         ", "          " }
-	local rep = string.rep
-	for i = 10, 2, -1 do
-		if num % i == 0 then
-			return rep(reps[i], num / i)
-		end
+	local reps = {
+		" ",
+		"  ",
+		"   ",
+		"    ",
+		"     ",
+		"      ",
+		"       ",
+		"        ",
+		"         ",
+		"          ",
+		"           ",
+		"            ",
+		"             ",
+		"              ",
+		"               ",
+		"                ",
+	}
+
+	if num < 17 then
+		return reps[num]
 	end
-	return rep(" ", num)
+	local rep = string.rep
+
+	if num % 2 == 0 then
+		for i = 16, 4, -2 do
+			if num % i == 0 then
+				return rep(reps[i], num / i)
+			end
+		end
+		return rep(reps[2], num)
+	else
+		for i = 15, 3, -2 do
+			if num % i == 0 then
+				return rep(reps[i], num / i)
+			end
+		end
+		return rep(reps[1], num)
+	end
 end
 
 --- Retrieves diagnostics at the line position in the specified buffer.
@@ -331,14 +362,14 @@ end
 ---
 --- @param bufnr integer The buffer number
 --- @param line  integer The line number
---- @param computed  boolean|nil Whether the diagnostics are computed
+--- @param recompute  boolean|nil Whether the diagnostics are recompute
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
-function M.fetch_diagnostics(bufnr, line, computed)
+function M.fetch_diagnostics(bufnr, line, recompute)
 	local diagnostics
 	local diagnostics_size
 
-	if computed then
+	if recompute then
 		diagnostics = diag.get(bufnr, { lnum = line - 1 })
 		diagnostics_size = #diagnostics
 		diagnostics_cache[bufnr][line] = diagnostics
@@ -373,16 +404,16 @@ end
 --- @param bufnr integer The buffer number to get diagnostics for.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
---- @param computed ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @return table A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
 --- @return table The full list of diagnostics for the line sorted by severity.
 --- @return integer The number of diagnostics in the line sorted by severity.
-function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, computed)
+function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)
 	if type(current_line) ~= "number" then
 		current_line = api.nvim_win_get_cursor(0)[1]
 	end
-	local diagnostics, diagnostics_size = M.fetch_diagnostics(bufnr, current_line, computed)
+	local diagnostics, diagnostics_size = M.fetch_diagnostics(bufnr, current_line, recompute)
 
 	if type(current_col) ~= "number" then
 		current_col = api.nvim_win_get_cursor(0)[2]
@@ -404,12 +435,12 @@ end
 --- @param bufnr integer The buffer number to get the diagnostics for.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
---- @param computed ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @return table A table of diagnostics for the current position and the current line number.
 --- @return table The full list of diagnostics for the line.
 --- @return integer The number of diagnostics in the list.
-function M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, computed)
-	local cursor_diags, _, diags, diags_size = M.fetch_cursor_diagnostics(bufnr, current_line, current_col, computed)
+function M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)
+	local cursor_diags, _, diags, diags_size = M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)
 	return cursor_diags[1], diags, diags_size
 end
 
@@ -777,14 +808,14 @@ end
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param current_line  integer The current line number. Defaults to the cursor line.
---- @param computed  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param recompute  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @param clean_opts number|table|nil Options for cleaning diagnostics before showing the new one.
 --- @return integer The line number where the diagnostic was shown.
 --- @return table|nil The diagnostic that was shown. nil if no diagnostics were shown.
 --- @return table The list of diagnostics at the line.
 --- @return integer The size of the diagnostics list.
-function M.show_top_severity_diagnostic(opts, bufnr, current_line, computed, clean_opts)
-	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, computed)
+function M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute, clean_opts)
+	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute)
 	if not diags[1] then
 		if clean_opts then
 			M.clean_diagnostics(bufnr, clean_opts)
@@ -801,14 +832,14 @@ end
 --- @param bufnr integer The buffer number.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
---- @param computed ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @param clean_opts ? number|table Options for cleaning diagnostics before showing the new one.
 --- @return integer The line number where the diagnostic was shown.
 --- @return table|nil The diagnostic that was shown. nil if no diagnostics were shown.
 --- @return table The list of diagnostics at the cursor position.
 --- @return integer The size of the diagnostics list.
-function M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, computed, clean_opts)
-	local highest_diag, diags, diags_size = M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, computed)
+function M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute, clean_opts)
+	local highest_diag, diags, diags_size = M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)
 	highest_diag = highest_diag or diags[1]
 	if not highest_diag then
 		if clean_opts then
@@ -864,17 +895,17 @@ function M.setup_buf(bufnr, opts)
 		end
 	end
 
-	local function show_cursor_diagnostic(current_line, current_col, computed)
+	local function show_cursor_diagnostic(current_line, current_col, recompute)
 		_, prev_cursor_diagnostic =
-			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, computed, prev_cursor_diagnostic)
+			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute, prev_cursor_diagnostic)
 	end
 
 	local function exists_any_diagnostics(line)
 		return M.exists_any_diagnostics(bufnr, line)
 	end
 
-	local function show_top_severity_diagnostic(line, computed, clean_opts)
-		return M.show_top_severity_diagnostic(opts, bufnr, line, computed, clean_opts)
+	local function show_top_severity_diagnostic(line, recompute, clean_opts)
+		return M.show_top_severity_diagnostic(opts, bufnr, line, recompute, clean_opts)
 	end
 
 	local function show_diagnostics(current_line, current_col)
