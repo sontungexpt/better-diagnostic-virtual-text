@@ -30,6 +30,8 @@ Add the following to your `init.lua` or `init.vim`:
 M.on_attach = function(client, bufnr)
     -- nil can replace with the options of each buffer
 	require("better-diagnostic-virtual-text").setup_buf(bufnr, nil)
+
+    --- ... other config for lsp client
 	lsp.handlers["textDocument/signatureHelp"] = lsp.with(lsp.handlers.signature_help, {
 		border = "single",
 		focusable = false,
