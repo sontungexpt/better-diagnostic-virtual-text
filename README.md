@@ -11,6 +11,9 @@ A Neovim plugin for enhanced diagnostic virtual text display, aiming to provide 
 
 ## Installation
 
+You need to set vim.diagnostic.config({ virtual_text = false }), to not have all diagnostics in the buffer displayed conflict.
+May be in the future we will integrate it with native vim.diagnostic
+
 Add the following to your `init.lua` or `init.vim`:
 
 ```lua
