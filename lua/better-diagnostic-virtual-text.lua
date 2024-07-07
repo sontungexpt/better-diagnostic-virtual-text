@@ -346,7 +346,7 @@ local space = function(num)
 				return rep(reps[i], num / i)
 			end
 		end
-		return rep(reps[2], num)
+		return rep(reps[2], num / 2)
 	else
 		for i = 15, 3, -2 do
 			if num % i == 0 then
