@@ -863,7 +863,7 @@ end
 
 function M.show_diagnostics(opts, bufnr, current_line, current_col)
 	M.clean_diagnostics(bufnr, true)
-	for line, diagnostics in meta_pairs(diagnostics_cache[bufnr]) do
+	for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
 		if line == current_line then
 			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col)
 		else
@@ -926,7 +926,14 @@ function M.setup_buf(bufnr, opts)
 	end
 
 	local function show_diagnostics(current_line, current_col)
-		M.show_diagnostics(opts, bufnr, current_line, current_line)
+		clean_diagnostics(true)
+		for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
+			if line == current_line then
+				show_cursor_diagnostic(current_line, current_col)
+			else
+				show_top_severity_diagnostic(line)
+			end
+		end
 	end
 
 	autocmd("DiagnosticChanged", {
@@ -981,24 +988,25 @@ function M.setup_buf(bufnr, opts)
 			end
 
 			local current_line, current_col = get_cursor(0)
-
 			if exists_any_diagnostics(current_line) then
-				if current_line == prev_line then
-					if
-						prev_cursor_diagnostic
-						and (
-							prev_cursor_diagnostic.col > current_col
-							or prev_cursor_diagnostic.end_col - 1 < current_col
-						)
-					then
+				if current_line == prev_line and prev_cursor_diagnostic then
+					if prev_cursor_diagnostic.col > current_col or prev_cursor_diagnostic.end_col - 1 < current_col then
 						show_cursor_diagnostic(current_line, current_col)
 					end
-				else
+				elseif opts.inline then
+					show_cursor_diagnostic(current_line, current_col)
+				else -- opts.inline is false
+					prev_cursor_diagnostic = nil -- remove previous cursor diagnostic cache to make sure this diagnostic is shown
+					if exists_any_diagnostics(prev_line) then
+						show_top_severity_diagnostic(prev_line) -- change last line diagnostic to top severity diagnostic
+					end
 					show_cursor_diagnostic(current_line, current_col)
 				end
 			elseif opts.inline then
 				clean_diagnostics(prev_cursor_diagnostic)
 				prev_cursor_diagnostic = nil
+			elseif current_line ~= prev_line then -- opts.inline is false
+				show_top_severity_diagnostic(prev_line)
 			end
 
 			prev_line = current_line
@@ -1029,12 +1037,17 @@ function M.setup_buf(bufnr, opts)
 	-- Attach to the buffer to rerender diagnostics virtual text when text changes.
 	api.nvim_buf_attach(bufnr, false, {
 		on_lines = function(
+			---@diagnostic disable-next-line: unused-local
 			event,
-			_,
+			---@diagnostic disable-next-line: unused-local
+			buffer_handle,
+			---@diagnostic disable-next-line: unused-local
 			changedtick,
+			---@diagnostic disable-next-line: unused-local
 			first_line_changed,
 			last_line_changed,
 			last_line_updated_range,
+			---@diagnostic disable-next-line: unused-local
 			prev_byte_count
 		)
 			if buffers_disabled[bufnr] then
