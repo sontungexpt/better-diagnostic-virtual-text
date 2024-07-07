@@ -316,6 +316,9 @@ end
 --- @param num number The total number of spaces to generate.
 --- @return string A string consisting of `num` spaces.
 local space = function(num)
+	if num < 1 then
+		return ""
+	end
 	local reps = {
 		" ",
 		"  ",
