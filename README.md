@@ -27,7 +27,7 @@ Add the following to your `init.lua` or `init.vim`:
     'sontungexpt/better-diagnostic-virtual-text',
     "LspAttach"
     config = function(_)
-        require('better-diagnostic-virtual-text').setup()
+        require('better-diagnostic-virtual-text').setup(opts)
     end
 }
 
@@ -474,7 +474,7 @@ Returns the line number where the diagnostic was shown.
 
 ## License
 
-MIT[License]
+MIT[License](./LICENSE)
 
 ## Contributors
 
