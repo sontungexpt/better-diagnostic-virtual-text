@@ -318,7 +318,10 @@ end
 local space = function(num)
 	if num < 1 then
 		return ""
+	elseif num < 160 then
+		return string.rep(" ", num)
 	end
+
 	local reps = {
 		" ",
 		"  ",
@@ -337,26 +340,20 @@ local space = function(num)
 		"               ",
 		"                ",
 	}
-
-	if num < 17 then
-		return reps[num]
-	end
-	local rep = string.rep
-
 	if num % 2 == 0 then
 		for i = 16, 4, -2 do
 			if num % i == 0 then
-				return rep(reps[i], num / i)
+				return string.rep(reps[i], num / i)
 			end
 		end
-		return rep(reps[2], num / 2)
+		return string.rep(reps[2], num / 2)
 	else
 		for i = 15, 3, -2 do
 			if num % i == 0 then
-				return rep(reps[i], num / i)
+				return string.rep(reps[i], num / i)
 			end
 		end
-		return rep(reps[1], num)
+		return string.rep(reps[1], num)
 	end
 end
 
