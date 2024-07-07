@@ -383,18 +383,20 @@ end
 --- underline symbol, text offsets, and parts to be removed.
 ---
 --- @param ui_opts table - The table of UI options. Should contain:
----     - arrow: string - The symbol used as the left arrow.
----     - up_arrow: string - The symbol used as the up arrow.
----     - right_kept_space: number - The space to keep on the right side.
----     - left_kept_space: number - The space to keep on the left side.
---- @param line_idx number - The index of the current line (1-based).
+---     - arrow: The symbol used as the left arrow.
+---     - up_arrow: The symbol used as the up arrow.
+---     - left_kept_space: The space to keep on the left side.
+---     - right_kept_space: The space to keep on the right side.
+---     - wrap_line_after: The maximum line length to wrap after.
+---     - above: Whether to display the virtual text above the line.
+--- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
 --- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
 --- @param max_line_length number - The maximum length of the line.
---- @param lasted_line boolean - Whether this is the last line of the diagnostic message.
+--- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
---- @param should_under_line boolean - Whether to use the underline arrow symbol.
---- @param removed_parts table - A table indicating which parts should be removed (e.g., arrow, left_kept_space, right_kept_space).
+--- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
+--- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
 function M.format_line_chunks(
@@ -405,7 +407,7 @@ function M.format_line_chunks(
 	max_line_length,
 	lasted_line,
 	virt_text_offset,
-	should_under_line,
+	should_display_below,
 	removed_parts
 )
 	local chunks = {}
@@ -428,7 +430,7 @@ function M.format_line_chunks(
 
 	local message_highlight = hls()
 
-	if should_under_line then
+	if should_display_below then
 		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
 		local space_offset = space(virt_text_offset)
 		if first_line then
@@ -500,6 +502,7 @@ end
 ---     - left_kept_space: The space to keep on the left side.
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
+---     - above: Whether to display the virtual text above the line.
 --- @return boolean is_under_min_length Whether the line length is under the minimum wrap length.
 --- @return number begin_offset The offset of the virtual text.
 --- @return number wrap_length The calculated wrap length.

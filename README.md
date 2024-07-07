@@ -9,6 +9,7 @@ Note: document is not enough.
 - **Ease of Use**: Simple setup and configuration.
 - **Beautiful UI**: Customizable colors, icons, and more.
 - **Toggleable**: Enable and disable with vim.diagnostic.enable/disable commands.
+- **Performance**: Optimized for speed and efficiency. Only updates virtual text when necessary.
 
 ## Installation
 
@@ -50,7 +51,7 @@ local default_options = {
 		right_kept_space = 3, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
 		arrow = "  ",
 		up_arrow = "  ",
-		above = false,
+		above = false, -- The virtual text will be displayed above the line
 	},
 	inline = true,
 }
@@ -64,6 +65,12 @@ local default_options = {
 UI will has 4 parts: arrow, left_kept_space, message, right_kept_space orders:
 
 | arrow | left_kept_space | message | right_kept_space |
+
+- arrow: This part is the arrow symbol that indicates the severity of the diagnostic message.
+- left_kept_space: The space to keep on the left side of the virtual text. Please make sure it enough to custom for each line.
+  Default this part is the tree in virtual text.
+- message: The message at the current line.
+- right_kept_space: The space to keep on the right side of the virtual text. Please make sure it enough to custom for each line.
 
 Override this function before setup the plugin.
 
@@ -79,26 +86,33 @@ Override this function before setup the plugin.
 ---     - up_arrow: string - The symbol used as the up arrow.
 ---     - right_kept_space: number - The space to keep on the right side.
 ---     - left_kept_space: number - The space to keep on the left side.
+
 --- @param line_idx number - The index of the current line (1-based).
+--- It start from the cursor line to above or below depend on the above option.
+
 --- @param line_msg string - The message to display on the line.
 --- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
 --- @param max_line_length number - The maximum length of the line.
+
 --- @param lasted_line boolean - Whether this is the last line of the diagnostic message.
+--- Please check line_idx == 1 to know the first line before checking lasted_line
+--- because the first line can be the lasted line if the message has only one line.
+
 --- @param virt_text_offset number - The offset for virtual text positioning.
 --- @param should_under_line boolean - Whether to use the underline arrow symbol.
 --- @param removed_parts table - A table indicating which parts should be removed (e.g., arrow, left_kept_space, right_kept_space).
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
 require("better-diagnostic-virtual-text").format_line_chunks = function(
-ui_opts,
-line_idx,
-line_msg,
-severity,
-max_line_length,
-lasted_line,
-virt_text_offset,
-should_under_line,
-removed_parts
+    ui_opts,
+    line_idx,
+    line_msg,
+    severity,
+    max_line_length,
+    lasted_line,
+    virt_text_offset,
+    should_under_line,
+    removed_parts
 )
     -- replace with your logic to get chunks for each line
 
@@ -183,6 +197,15 @@ removed_parts
 	return chunks
 end
 
+```
+
+## Toggle
+
+You can enable and disable the plugin using the following commands:
+
+```lua
+    vim.diagnostic.enable(true, { bufnr = vim.api.nvim_get_current_buf() }) -- Enable the plugin for the current buffer.
+    vim.diagnostic.enable(false, { bufnr = vim.api.nvim_get_current_buf() }) -- Disable the plugin for the current buffer.
 ```
 
 ## Preview
