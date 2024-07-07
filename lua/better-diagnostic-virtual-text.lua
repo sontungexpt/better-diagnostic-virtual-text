@@ -1,3 +1,4 @@
+---@diagnostic disable: redundant-return-value
 local vim, type, pairs, ipairs = vim, type, pairs, ipairs
 local api, fn, diag = vim.api, vim.fn, vim.diagnostic
 local autocmd, augroup, strdisplaywidth, get_cursor, tbl_insert =
@@ -41,8 +42,29 @@ local buffers_disabled = {}
 local diagnostics_cache = {}
 do
 	local real_diagnostics_cache = {}
-	function diagnostics_cache:exist(bufnr)
+
+	function diagnostics_cache.exist(bufnr)
 		return real_diagnostics_cache[bufnr] ~= nil
+	end
+
+	--- Update the diagnostics cache for a buffer.
+	--- @param bufnr integer The buffer number.
+	--- @param diagnostics ? table The list of diagnostics to update. If not provided it will get all diagnostics of current bufnr
+	function diagnostics_cache.update(bufnr, diagnostics)
+		real_diagnostics_cache[bufnr] = nil -- no need to call __newindex from the diagnostics_cache
+		local exists_diags_bufnr = diagnostics_cache[bufnr]
+		for _, d in ipairs(diagnostics or diag.get(bufnr)) do
+			exists_diags_bufnr[d.lnum + 1] = d
+		end
+	end
+
+	--- Updates the diagnostics cache for the buffer at a line
+	--- @param bufnr integer The buffer number
+	--- @param line integer The line number
+	--- @param diagnostic table The new diagnostic to add to cache, or a list to update the line
+	function diagnostics_cache.update_line(bufnr, line, diagnostic)
+		local exists_diags_bufnr = diagnostics_cache[bufnr]
+		exists_diags_bufnr[line] = diagnostic
 	end
 
 	setmetatable(diagnostics_cache, {
@@ -144,17 +166,6 @@ do
 			rawset(t, bufnr, value)
 		end,
 	})
-end
-
---- Tracks the diagnostics for a buffer.
---- @param bufnr integer The buffer number.
---- @param diagnostics table The list of diagnostics to track.
-local function track_diagnostics(bufnr, diagnostics)
-	diagnostics_cache[bufnr] = {} -- clear all diagnostics for this buffer
-	local exists_diags_bufnr = diagnostics_cache[bufnr]
-	for _, d in ipairs(diagnostics) do
-		exists_diags_bufnr[d.lnum + 1] = d
-	end
 end
 
 --- Updates the diagnostics cache
@@ -283,8 +294,8 @@ end
 --- Diagnostics are filtered and sorted by severity, with the most severe ones first.
 ---
 --- @param bufnr integer The buffer number
---- @param line integer The line number
---- @param computed ? boolean Whether the diagnostics are computed
+--- @param line  integer The line number
+--- @param computed  boolean|nil Whether the diagnostics are computed
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
 function M.fetch_diagnostics(bufnr, line, computed)
@@ -696,7 +707,7 @@ end
 --- Displays a diagnostic for a buffer, optionally cleaning existing diagnostics before showing the new one.
 --- This function sets virtual text and lines for the diagnostic and highlights the line where the diagnostic is shown.
 --- The line where the diagnostic is shown is also the start line of the diagnostic.
---- @param opts  table|nil Options for displaying the diagnostic. If not provided, the default options are used.
+--- @param opts ? table Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param diagnostic table The diagnostic to show.
 --- @param clean_opts  number|table|nil Options for cleaning diagnostics before showing the new one.
@@ -708,7 +719,8 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)
 	if clean_opts then
 		M.clean_diagnostics(bufnr, clean_opts)
 	end
-	local virt_text, virt_lines = generate_virtual_texts(opts or default_options, diagnostic)
+	opts = opts or default_options
+	local virt_text, virt_lines = generate_virtual_texts(opts, diagnostic)
 	local virtline = diagnostic.lnum
 	local shown_line = api.nvim_buf_set_extmark(bufnr, ns, virtline, 0, {
 		id = virtline + 1,
@@ -725,7 +737,7 @@ end
 ---
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
---- @param current_line  integer|nil The current line number. Defaults to the cursor line.
+--- @param current_line  integer The current line number. Defaults to the cursor line.
 --- @param computed  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @param clean_opts number|table|nil Options for cleaning diagnostics before showing the new one.
 --- @return integer The line number where the diagnostic was shown.
@@ -789,8 +801,8 @@ function M.setup_buf(bufnr, opts)
 	local lines_count_changed = false
 	local prev_diag_changed_trigger_line = -1
 
-	if not diagnostics_cache:exist(bufnr) then
-		track_diagnostics(bufnr, diag.get(bufnr))
+	if not diagnostics_cache.exist(bufnr) then
+		diagnostics_cache.update(bufnr)
 	end
 
 	local function clean_diagnostics(lines_or_diagnostic)
@@ -833,7 +845,8 @@ function M.setup_buf(bufnr, opts)
 		desc = "Main event tracker for diagnostics changes",
 		callback = function(args)
 			if buffers_disabled[bufnr] then
-				track_diagnostics(bufnr, args.data.diagnostics) -- still need to track the diagnostics in case the buffer is disabled
+				-- still need to update the diagnostics cache in case the buffer is disabled
+				diagnostics_cache.update(bufnr, args.data.diagnostics)
 				return
 			end
 
@@ -844,8 +857,8 @@ function M.setup_buf(bufnr, opts)
 				show_cursor_diagnostic(current_line, current_col, true, prev_cursor_diagnostic)
 			else
 				-- If text is not currently changing, it implies that the cursor moved before the diagnostics changed event.
-				-- Therefore, we need to re-track the diagnostics because multiple diagnostics across different lines may have changed simultaneously.
-				track_diagnostics(bufnr, args.data.diagnostics)
+				-- Therefore, we need to update the diagnostics cache because multiple diagnostics across different lines may have changed simultaneously.
+				diagnostics_cache.update(bufnr, args.data.diagnostics)
 				if opts.inline then
 					show_cursor_diagnostic(current_line, current_col, false, prev_cursor_diagnostic)
 				else
