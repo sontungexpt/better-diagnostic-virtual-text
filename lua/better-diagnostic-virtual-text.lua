@@ -805,6 +805,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)
 		virt_text = virt_text,
 		virt_lines = virt_lines,
 		virt_lines_above = opts.ui.above,
+		priority = 2003,
 		virt_text_pos = "eol",
 		line_hl_group = "CursorLine",
 	})
@@ -928,14 +929,7 @@ function M.setup_buf(bufnr, opts)
 	end
 
 	local function show_diagnostics(current_line, current_col)
-		clean_diagnostics(true)
-		for line, diagnostics in meta_pairs(diagnostics_cache[bufnr]) do
-			if line == current_line then
-				show_cursor_diagnostic(current_line, current_col)
-			else
-				show_top_severity_diagnostic(line)
-			end
-		end
+		M.show_diagnostics(opts, bufnr, current_line, current_line)
 	end
 
 	autocmd("DiagnosticChanged", {
