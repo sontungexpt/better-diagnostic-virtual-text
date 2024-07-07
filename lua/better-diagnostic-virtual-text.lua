@@ -467,6 +467,7 @@ end
 --- @param virt_text_offset number - The offset for virtual text positioning.
 --- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
 --- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
+--- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
 function M.format_line_chunks(
@@ -478,7 +479,8 @@ function M.format_line_chunks(
 	lasted_line,
 	virt_text_offset,
 	should_display_below,
-	removed_parts
+	removed_parts,
+	diagnostic
 )
 	local chunks = {}
 	local first_line = line_idx == 1
@@ -679,7 +681,8 @@ local function generate_virtual_texts(opts, diagnostic)
 		size == 1,
 		offset,
 		should_display_below,
-		removed_parts
+		removed_parts,
+		diagnostic
 	)
 	if should_display_below then
 		if size == 1 then
@@ -702,7 +705,8 @@ local function generate_virtual_texts(opts, diagnostic)
 					i == 1,
 					offset,
 					should_display_below,
-					removed_parts
+					removed_parts,
+					diagnostic
 				)
 			)
 		end
@@ -719,7 +723,8 @@ local function generate_virtual_texts(opts, diagnostic)
 					i == size,
 					offset,
 					should_display_below,
-					removed_parts
+					removed_parts,
+					diagnostic
 				)
 			)
 		end
@@ -856,6 +861,17 @@ end
 
 function M.get_line_shown(diagnostic)
 	return diagnostic.lnum + 1
+end
+
+function M.show_diagnostics(opts, bufnr, current_line, current_col)
+	M.clean_diagnostics(bufnr, true)
+	for line, diagnostics in meta_pairs(diagnostics_cache[bufnr]) do
+		if line == current_line then
+			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col)
+		else
+			M.show_top_severity_diagnostic(opts, bufnr, line)
+		end
+	end
 end
 
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.

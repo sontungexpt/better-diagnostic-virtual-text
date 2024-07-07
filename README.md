@@ -80,25 +80,21 @@ Override this function before setup the plugin.
 --- underline symbol, text offsets, and parts to be removed.
 ---
 --- @param ui_opts table - The table of UI options. Should contain:
----     - arrow: string - The symbol used as the left arrow.
----     - up_arrow: string - The symbol used as the up arrow.
----     - right_kept_space: number - The space to keep on the right side.
----     - left_kept_space: number - The space to keep on the left side.
-
---- @param line_idx number - The index of the current line (1-based).
---- It start from the cursor line to above or below depend on the above option.
-
+---     - arrow: The symbol used as the left arrow.
+---     - up_arrow: The symbol used as the up arrow.
+---     - left_kept_space: The space to keep on the left side.
+---     - right_kept_space: The space to keep on the right side.
+---     - wrap_line_after: The maximum line length to wrap after.
+---     - above: Whether to display the virtual text above the line.
+--- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
 --- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
 --- @param max_line_length number - The maximum length of the line.
-
---- @param lasted_line boolean - Whether this is the last line of the diagnostic message.
---- Please check line_idx == 1 to know the first line before checking lasted_line
---- because the first line can be the lasted line if the message has only one line.
-
+--- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
---- @param should_under_line boolean - Whether to use the underline arrow symbol.
---- @param removed_parts table - A table indicating which parts should be removed (e.g., arrow, left_kept_space, right_kept_space).
+--- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
+--- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
+--- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
 require("better-diagnostic-virtual-text").format_line_chunks = function(
@@ -110,7 +106,8 @@ require("better-diagnostic-virtual-text").format_line_chunks = function(
     lasted_line,
     virt_text_offset,
     should_under_line,
-    removed_parts
+    removed_parts,
+    diagnostic
 )
     -- replace with your logic to get chunks for each line
 
@@ -245,6 +242,225 @@ For the tree highlights, use:
 - `BetterDiagnosticVirtualTextTreeWarn`
 - `BetterDiagnosticVirtualTextTreeInfo`
 - `BetterDiagnosticVirtualTextTreeHint`
+
+## Public API Functions
+
+NOTE : I was too lazy to write the complete API documentation, so I used ChatGPT to generate it. If there are any inaccuracies, please refer to the source for verification.
+
+### `M.inspect_cache()`
+
+- **Description**: Inspects the diagnostics cache for debugging purposes.
+- **Parameters**: None
+- **Returns**: None
+
+### `M.update_diagnostics_cache(bufnr, line, diagnostic)`
+
+- **Description**: Updates the diagnostics cache for a specific buffer and line.
+- **Parameters**:
+  - `bufnr` (`integer`): The buffer number.
+  - `line` (`integer`): The line number.
+  - `diagnostic` (`table`): The new diagnostic to track or list of diagnostics to update.
+- **Returns**: None
+
+### `M.fetch_diagnostics(bufnr, line, recompute)`
+
+- **Description**: Retrieves diagnostics at a specific line in the specified buffer.
+- **Parameters**:
+  - `bufnr` (`integer`): The buffer number.
+  - `line` (`integer`): The line number.
+  - `recompute` (`boolean`): Whether to recompute diagnostics or use cached diagnostics.
+- **Returns**:
+  - `table`: List of diagnostics sorted by severity.
+  - `integer`: Number of diagnostics.
+
+### `M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)`
+
+- **Description**: Retrieves diagnostics at the cursor position in the specified buffer.
+- **Parameters**:
+  - `bufnr` (`integer`): The buffer number.
+  - `current_line` (`integer`): Optional. The current line number. Defaults to cursor line.
+  - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
+  - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
+- **Returns**:
+  - `table`: Diagnostics at the cursor position sorted by severity.
+  - `integer`: Number of diagnostics at the cursor position.
+  - `table`: Full list of diagnostics for the line sorted by severity.
+  - `integer`: Number of diagnostics in the line sorted by severity.
+
+### `M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)`
+
+- **Description**: Retrieves the diagnostic with the highest severity at the cursor position in the specified buffer.
+- **Parameters**:
+  - `bufnr` (`integer`): The buffer number.
+  - `current_line` (`integer`): Optional. The current line number. Defaults to cursor line.
+  - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
+  - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
+- **Returns**:
+  - `table`: Diagnostic at the cursor position.
+  - `table`: Full list of diagnostics for the line.
+  - `integer`: Number of diagnostics in the list.
+
+### `M.format_line_chunks(ui_opts, line_idx, line_msg, severity, max_line_length, lasted_line, virt_text_offset, should_display_below, removed_parts, diagnostic)`
+
+- **Description**: Formats line chunks for virtual text display based on severity and UI options.
+- **Parameters**:
+  - `ui_opts` (`table`): Table of UI options.
+  - `line_idx` (`number`): Index of the current line (1-based).
+  - `line_msg` (`string`): Message to display on the line.
+  - `severity` (`number`): Severity level of the diagnostic.
+  - `max_line_length` (`number`): Maximum length of the line.
+  - `lasted_line` (`boolean`): Whether this is the last line of the diagnostic message.
+  - `virt_text_offset` (`number`): Offset for virtual text positioning.
+  - `should_display_below` (`boolean`): Whether to display virtual text below the line.
+  - `removed_parts` (`table`): Table indicating parts to delete to make room for message.
+  - `diagnostic` (`table`): The diagnostic to display.
+- **Returns**:
+  - `table`: List of formatted chunks for virtual text display.
+
+### `M.evaluate_extmark(ui_opts)`
+
+Calculates the offset and wrap length of virtual text based on UI options.
+
+- **Parameters:**
+
+  - `ui_opts` (table): A table containing UI settings.
+    - `arrow` (string): The symbol used as the left arrow.
+    - `up_arrow` (string): The symbol used as the up arrow.
+    - `left_kept_space` (number): The space to keep on the left side.
+    - `right_kept_space` (number): The space to keep on the right side.
+    - `wrap_line_after` (number): The maximum line length to wrap after.
+    - `above` (boolean): Whether to display the virtual text above the line.
+
+- **Returns:**
+  - `is_under_min_length` (boolean): Whether the line length is under the minimum wrap length.
+  - `begin_offset` (number): The offset of the virtual text.
+  - `wrap_length` (number): The calculated wrap length.
+  - `removed_parts` (table): A table indicating which parts were removed to fit within the wrap length.
+
+### `M.generate_virtual_texts(opts, diagnostic)`
+
+Generates virtual texts and virtual lines for a diagnostic message.
+
+- **Parameters:**
+
+  - `opts` (table): Options for generating virtual texts.
+  - `diagnostic` (table): The diagnostic message to generate virtual texts for.
+
+- **Returns:**
+  - `virt_texts` (table): The list of virtual texts.
+  - `virt_lines` (table): The list of virtual lines.
+
+### `M.exists_any_diagnostics(bufnr, line)`
+
+Checks if diagnostics exist for a buffer at a line.
+
+- **Parameters:**
+
+  - `bufnr` (integer): The buffer number to check.
+  - `line` (integer): The line number to check.
+
+- **Returns:**
+  - `exists` (boolean): True if diagnostics exist, false otherwise.
+
+### `M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute, clean_opts)`
+
+Shows the highest severity diagnostic at the line for a buffer.
+
+- **Parameters:**
+
+  - `opts` (table): Options for displaying the diagnostic.
+  - `bufnr` (integer): The buffer number.
+  - `current_line` (integer): The current line number.
+  - `recompute` (boolean): Whether to recompute the diagnostics.
+  - `clean_opts` (number|table): Options for cleaning diagnostics before showing the new one.
+
+- **Returns:**
+  - `line_number` (integer): The line number where the diagnostic was shown.
+  - `diagnostic` (table): The diagnostic that was shown.
+  - `diagnostics_list` (table): The list of diagnostics at the line.
+  - `size` (integer): The size of the diagnostics list.
+
+### `M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute, clean_opts)`
+
+Shows the highest severity diagnostic at the cursor position in a buffer.
+
+- **Parameters:**
+
+  - `opts` (table): Options for displaying the diagnostic.
+  - `bufnr` (integer): The buffer number.
+  - `current_line` (integer): The current line number.
+  - `current_col` (integer): The current column number.
+  - `recompute` (boolean): Whether to recompute the diagnostics.
+  - `clean_opts` (number|table): Options for cleaning diagnostics before showing the new one.
+
+- **Returns:**
+  - `line_number` (integer): The line number where the diagnostic was shown.
+  - `diagnostic` (table): The diagnostic that was shown.
+  - `diagnostics_list` (table): The list of diagnostics at the cursor position.
+  - `size` (integer): The size of the diagnostics list.
+
+### `M.clean_diagnostics(bufnr, lines_or_diagnostic)`
+
+Cleans diagnostics for a buffer.
+
+- **Parameters:**
+
+  - `bufnr` (integer): The buffer number.
+  - `lines_or_diagnostic` (number|table): Specifies the lines or diagnostic to clean.
+
+- **Returns:**
+  - `cleared` (boolean): True if any diagnostics were cleared, false otherwise.
+
+### `M.show_diagnostics(opts, bufnr, current_line, current_col)`
+
+Displays diagnostics for a buffer, optionally cleaning existing diagnostics before showing the new one.
+
+- **Parameters:**
+  - `opts` (table): Options for displaying the diagnostic.
+  - `bufnr` (integer): The buffer number.
+  - `current_line` (integer): The current line number.
+  - `current_col` (integer): The current column number.
+
+### `M.setup_buf(bufnr, opts)`
+
+Sets up the buffer to handle diagnostic rendering and interaction.
+
+- **Parameters:**
+  - `bufnr` (integer): The buffer number.
+  - `opts` (table): Options for setting up the buffer.
+
+### `M.setup(opts)`
+
+Sets up the module to handle diagnostic rendering and interaction globally.
+
+- **Parameters:**
+  - `opts` (table): Options for setting up the module.
+
+### `M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)`
+
+Displays a diagnostic for a buffer, optionally cleaning existing diagnostics before showing the new one.
+
+- **Parameters:**
+
+  - `opts` (table): Options for displaying the diagnostic.
+  - `bufnr` (integer): The buffer number.
+  - `diagnostic` (table): The diagnostic to show.
+  - `clean_opts` (number|table|nil): Options for cleaning diagnostics before showing the new one.
+
+- **Returns:**
+  - `shown_line` (integer): The start line of the diagnostic where it was shown.
+  - `diagnostic` (table): The diagnostic that was shown.
+
+### `M.get_line_shown(diagnostic)`
+
+Returns the line number where the diagnostic was shown.
+
+- **Parameters:**
+
+  - `diagnostic` (table): The diagnostic.
+
+- **Returns:**
+  - `line_shown` (integer): The line number where the diagnostic was shown.
 
 ## Preview
 
