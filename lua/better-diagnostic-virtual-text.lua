@@ -829,6 +829,7 @@ function M.setup_buf(bufnr, opts)
 	if buffers_attached[bufnr] then
 		return
 	end
+	buffers_attached[bufnr] = true
 
 	local autocmd_group = api.nvim_create_augroup(make_group_name(bufnr), { clear = true })
 	opts = opts and vim.tbl_deep_extend("force", default_options, opts) or default_options
