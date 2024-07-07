@@ -838,8 +838,9 @@ function M.setup_buf(bufnr, opts)
 	local prev_line = 1 -- The previous line that cursor was on.
 	local text_changing = false
 	local prev_cursor_diagnostic = nil
-	local lines_count_changed = false
-	local prev_diag_changed_trigger_line = -1
+	local scheduled_update = false
+	local new_diagnostics = nil
+	-- local multiple_lines_changed = false
 
 	if not diagnostics_cache.exist(bufnr) then
 		diagnostics_cache.update(bufnr)
@@ -853,8 +854,7 @@ function M.setup_buf(bufnr, opts)
 		prev_line = 1 -- The previous line that cursor was on.
 		text_changing = false
 		prev_cursor_diagnostic = nil
-		lines_count_changed = false
-		prev_diag_changed_trigger_line = -1
+		-- multiple_lines_changed = false
 		clean_diagnostics(true)
 	end
 
@@ -893,30 +893,35 @@ function M.setup_buf(bufnr, opts)
 		buffer = bufnr,
 		desc = "Main event tracker for diagnostics changes",
 		callback = function(args)
-			if buffers_disabled[bufnr] then
-				-- still need to update the diagnostics cache in case the buffer is disabled
-				diagnostics_cache.update(bufnr, args.data.diagnostics)
+			new_diagnostics = args.data.diagnostics
+
+			if scheduled_update then
 				return
 			end
 
-			local current_line, current_col = get_cursor(0)
+			scheduled_update = true
+			-- delay the update to prevent multiple updates in a short time
+			vim.defer_fn(function()
+				scheduled_update = false
 
-			if not lines_count_changed and (text_changing or prev_diag_changed_trigger_line == current_line) then
-				show_cursor_diagnostic(current_line, current_col, true)
-			else
-				-- If text is not currently changing, it implies that the cursor moved before the diagnostics changed event.
-				-- Therefore, we need to update the diagnostics cache because multiple diagnostics across different lines may have changed simultaneously.
-				diagnostics_cache.update(bufnr, args.data.diagnostics)
+				diagnostics_cache.update(bufnr, new_diagnostics)
+
+				if buffers_disabled[bufnr] then
+					-- still need to update the cache for the buffer
+					return
+				end
+
+				local current_line, current_col = get_cursor(0)
+
 				if opts.inline then
 					show_cursor_diagnostic(current_line, current_col)
 				else
 					show_diagnostics(current_line, current_col)
 				end
-				lines_count_changed = false
-			end
 
-			text_changing = false
-			prev_diag_changed_trigger_line = current_line
+				-- multiple_lines_changed = false
+				text_changing = false
+			end, 100)
 		end,
 	})
 
@@ -955,11 +960,8 @@ function M.setup_buf(bufnr, opts)
 				prev_cursor_diagnostic = nil
 			end
 
-			if prev_diag_changed_trigger_line ~= current_line then
-				prev_diag_changed_trigger_line = -1
-			end
 			prev_line = current_line
-			lines_count_changed = false
+			-- multiple_lines_changed = false
 		end,
 	})
 
@@ -999,7 +1001,7 @@ function M.setup_buf(bufnr, opts)
 			end
 			text_changing = true
 			if last_line_changed ~= last_line_updated_range then -- added or removed line
-				lines_count_changed = true
+				-- multiple_lines_changed = true
 				local current_line, current_col = get_cursor(0)
 				show_cursor_diagnostic(current_line, current_col)
 			elseif prev_cursor_diagnostic then
