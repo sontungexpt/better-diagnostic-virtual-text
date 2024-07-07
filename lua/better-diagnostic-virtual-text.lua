@@ -921,7 +921,7 @@ function M.setup_buf(bufnr, opts)
 
 				-- multiple_lines_changed = false
 				text_changing = false
-			end, 100)
+			end, 300)
 		end,
 	})
 
