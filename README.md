@@ -208,6 +208,46 @@ You can enable and disable the plugin using the following commands:
     vim.diagnostic.enable(false, { bufnr = vim.api.nvim_get_current_buf() }) -- Disable the plugin for the current buffer.
 ```
 
+## Highlight Names
+
+### Default
+
+The default highlight names for each severity level are:
+
+- `DiagnosticVirtualTextError`
+- `DiagnosticVirtualTextWarn`
+- `DiagnosticVirtualTextInfo`
+- `DiagnosticVirtualTextHint`
+
+### Custom Overrides
+
+You can override the default highlight names with:
+
+- `BetterDiagnosticVirtualTextError`
+- `BetterDiagnosticVirtualTextWarn`
+- `BetterDiagnosticVirtualTextInfo`
+- `BetterDiagnosticVirtualTextHint`
+
+### Arrow Highlights
+
+For the arrow highlights, use:
+
+- `BetterDiagnosticVirtualTextArrow` for all severity levels.
+- `BetterDiagnosticVirtualTextArrowError`
+- `BetterDiagnosticVirtualTextArrowWarn`
+- `BetterDiagnosticVirtualTextArrowInfo`
+- `BetterDiagnosticVirtualTextArrowHint`
+
+### Tree Highlights
+
+For the tree highlights, use:
+
+- `BetterDiagnosticVirtualTextTree` for all severity levels.
+- `BetterDiagnosticVirtualTextTreeError`
+- `BetterDiagnosticVirtualTextTreeWarn`
+- `BetterDiagnosticVirtualTextTreeInfo`
+- `BetterDiagnosticVirtualTextTreeHint`
+
 ## Preview
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
