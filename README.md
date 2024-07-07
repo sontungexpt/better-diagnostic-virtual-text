@@ -4,10 +4,15 @@ A Neovim plugin for enhanced diagnostic virtual text display, aiming to provide 
 
 ## Features
 
-- **Ease of Use**: Simple setup and configuration.
-- **Beautiful UI**: Customizable colors, icons, and more.
-- **Toggleable**: Enable and disable with vim.diagnostic.enable/disable commands.
-- **Performance**: Optimized for speed and efficiency. Only updates virtual text when necessary.
+- **Ease of Use**: Effortless setup and configuration.
+- **Beautiful UI**: Customizable colors, icons, and more for an aesthetically pleasing interface.
+- **Auto-fix Capability**: Automatically adjusts to fit the current window size for seamless display.
+- **Toggleable**: Easily enable or disable using `vim.diagnostic.enable/disable` commands.
+- **Performance**: Optimized for speed and efficiency, updating virtual text only when necessary.
+
+## Preview
+
+https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
 ## Installation
 
@@ -466,10 +471,6 @@ Returns the line number where the diagnostic was shown.
 
 - **Returns:**
   - `line_shown` (integer): The line number where the diagnostic was shown.
-
-## Preview
-
-https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
 ## License
 
