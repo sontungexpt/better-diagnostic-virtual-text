@@ -35,6 +35,14 @@ local default_options = {
 
 local buffers_attached = {}
 local buffers_disabled = {}
+
+-- extmark_cache: bufnr -> key: diagnostic table, value: { should_display_below, offset, wrap_length, removed_parts, msgs, size }
+local extmark_cache = setmetatable({}, {
+	__index = function(t, bufnr)
+		t[bufnr] = {}
+		return t[bufnr]
+	end,
+})
 -- @type table<integer, table<integer, table<string, table>>>>
 -- bufnr -> line -> address of diagnostic -> diagnostic
 local diagnostics_cache = {}
@@ -71,6 +79,7 @@ do
 	--- @param bufnr integer The buffer number.
 	--- @param diagnostics ? table The list of diagnostics to update. If not provided it will get all diagnostics of current bufnr
 	function diagnostics_cache.update(bufnr, diagnostics)
+		extmark_cache[bufnr] = {}
 		real_diagnostics_cache[bufnr] = nil -- no need to call __newindex from the diagnostics_cache
 		local exists_diags_bufnr = diagnostics_cache[bufnr]
 		for _, d in ipairs(diagnostics or diag.get(bufnr)) do
@@ -192,6 +201,7 @@ do
 				callback = function()
 					rawset(t, bufnr, nil)
 					buffers_disabled[bufnr] = nil
+					extmark_cache[bufnr] = nil
 					real_diagnostics_cache[bufnr] = nil
 					api.nvim_del_augroup_by_name(make_group_name(bufnr))
 				end,
@@ -238,6 +248,12 @@ end
 --- @param diagnostic table The new diagnostic to track or list of diagnostics in a line to update
 function M.update_diagnostics_cache(bufnr, line, diagnostic)
 	diagnostics_cache[bufnr][line] = diagnostic
+end
+
+--- Clears the diagnostics extmarks for a buffer.
+--- @param bufnr integer The buffer number to clear the diagnostics for.
+function M.clear_extmark_cache(bufnr)
+	extmark_cache[bufnr] = {}
 end
 
 --- Gets the cursor position in the buffer and returns the line and column numbers.
@@ -679,13 +695,23 @@ end
 ---
 --- @param opts table A table of options, which includes the UI settings and signs to use for the virtual texts.
 --- @param diagnostic table The diagnostic message to generate the virtual texts for.
+--- @param recompute_ui ? boolean Whether to recompute the virtual texts UI. Defaults to false.
 --- @return table The list of virtual texts.
 --- @return table The list of virtual lines.
 --- @return number The offset of the virtual text.
-local function generate_virtual_texts(opts, diagnostic)
+local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 	local ui = opts.ui
-	local should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui, diagnostic.lnum + 1)
-	local msgs, size = wrap_text(diagnostic.message, wrap_length)
+	local should_display_below, offset, wrap_length, removed_parts, msgs, size
+	local cache = extmark_cache[bufnr][diagnostic]
+	if recompute_ui or not cache then
+		should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui, diagnostic.lnum + 1)
+		msgs, size = wrap_text(diagnostic.message, wrap_length)
+		extmark_cache[bufnr][diagnostic] = { should_display_below, offset, wrap_length, removed_parts, msgs, size }
+	else
+		print("cache")
+		should_display_below, offset, wrap_length, removed_parts, msgs, size =
+			cache[1], cache[2], cache[3], cache[4], cache[5], cache[6]
+	end
 	if size == 0 then
 		return {}, {}, offset
 	end
@@ -780,7 +806,7 @@ end
 ---
 --- @return boolean Returns `true` if any diagnostics were cleared, `false` if none were cleared, or `nil`.
 function M.clean_diagnostics(bufnr, lines_or_diagnostic)
-	if lines_or_diagnostic == nil then
+	if not lines_or_diagnostic then
 		return false
 	elseif type(lines_or_diagnostic) == "number" then
 		return api.nvim_buf_del_extmark(bufnr, ns, lines_or_diagnostic)
@@ -813,17 +839,18 @@ end
 --- @param opts ? table Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param diagnostic table The diagnostic to show.
---- @param clean_opts  number|table|nil Options for cleaning diagnostics before showing the new one.
+--- @param clean_opts  boolean|number|table|nil Options for cleaning diagnostics before showing the new one.
 ---                     If a number is provided, it is treated as an extmark ID to delete.
 ---                     If a table is provided, it should contain line numbers or a range to clear.
+--- @param recompute_ui ? boolean Whether to recompute the diagnostics. Defaults to false.
 --- @return integer The start line of the diagnostic where it was shown.
 --- @return table The diagnostic that was shown.
-function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)
+function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 	if clean_opts then
 		M.clean_diagnostics(bufnr, clean_opts)
 	end
 	opts = opts or default_options
-	local virt_text, virt_lines, offset = generate_virtual_texts(opts, diagnostic)
+	local virt_text, virt_lines, offset = generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 	local virtline = diagnostic.lnum
 	local max_buf_line = api.nvim_buf_line_count(bufnr)
 	if virtline + 1 > max_buf_line then
@@ -849,21 +876,22 @@ end
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param current_line  integer The current line number. Defaults to the cursor line.
---- @param recompute  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @param clean_opts number|table|nil Options for cleaning diagnostics before showing the new one.
+--- @param recompute_diags  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param clean_opts boolean|number|table|nil Options for cleaning diagnostics before showing the new one.
+--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
 --- @return integer The line number where the diagnostic was shown.
 --- @return table|nil The diagnostic that was shown. nil if no diagnostics were shown.
 --- @return table The list of diagnostics at the line.
 --- @return integer The size of the diagnostics list.
-function M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute, clean_opts)
-	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute)
+function M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute_diags, clean_opts, recompute_ui)
+	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags)
 	if not diags[1] then
 		if clean_opts then
 			M.clean_diagnostics(bufnr, clean_opts)
 		end
 		return -1, nil, {}, 0
 	end
-	local shown_line, shown_diagnostic = M.show_diagnostic(opts, bufnr, diags[1], clean_opts)
+	local shown_line, shown_diagnostic = M.show_diagnostic(opts, bufnr, diags[1], clean_opts, recompute_ui)
 	return shown_line, shown_diagnostic, diags, diags_size
 end
 
@@ -873,14 +901,16 @@ end
 --- @param bufnr integer The buffer number.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
---- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @param clean_opts ? number|table Options for cleaning diagnostics before showing the new one.
+--- @param recompute_diags ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param clean_opts ? boolean|number|table Options for cleaning diagnostics before showing the new one.
+--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
 --- @return integer The line number where the diagnostic was shown.
 --- @return table|nil The diagnostic that was shown. nil if no diagnostics were shown.
 --- @return table The list of diagnostics at the cursor position.
 --- @return integer The size of the diagnostics list.
-function M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute, clean_opts)
-	local highest_diag, diags, diags_size = M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)
+function M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute_diags, clean_opts, recompute_ui)
+	local highest_diag, diags, diags_size =
+		M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute_diags)
 	highest_diag = highest_diag or diags[1]
 	if not highest_diag then
 		if clean_opts then
@@ -888,7 +918,7 @@ function M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recomp
 		end
 		return -1, nil, {}, 0
 	end
-	local shown_line, shown_diagnostic = M.show_diagnostic(opts, bufnr, highest_diag, clean_opts)
+	local shown_line, shown_diagnostic = M.show_diagnostic(opts, bufnr, highest_diag, clean_opts, recompute_ui)
 	return shown_line, shown_diagnostic, diags, diags_size
 end
 
@@ -912,13 +942,14 @@ function M.setup_buf(bufnr, opts)
 	local prev_cursor_diagnostic = nil
 	local scheduled_update = false
 	local new_diagnostics = nil
+	local can_use_diagnostic_cache = true
 	-- local multiple_lines_changed = false
 
 	if not diagnostics_cache.exist(bufnr) then
 		diagnostics_cache.update(bufnr)
 	end
 
-	-- declare shadowed functions for each buffer
+	--- @param lines_or_diagnostic number|table|boolean|nil Specifies the lines or diagnostic to clean, If nil, do nothing
 	local function clean_diagnostics(lines_or_diagnostic)
 		M.clean_diagnostics(bufnr, lines_or_diagnostic)
 	end
@@ -927,29 +958,49 @@ function M.setup_buf(bufnr, opts)
 		prev_line = 1 -- The previous line that cursor was on.
 		text_changing = false
 		prev_cursor_diagnostic = nil
+		extmark_cache[bufnr] = nil
 		-- multiple_lines_changed = false
 		clean_diagnostics(true)
 	end
 
-	local function show_diagnostic(diagnostic)
+	--- @param diagnostic table The diagnostic to show.
+	--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
+	local function show_diagnostic(diagnostic, recompute_ui)
 		if diagnostic then
-			M.show_diagnostic(opts, bufnr, diagnostic) -- re-render last shown diagnostic
+			M.show_diagnostic(opts, bufnr, diagnostic, false, recompute_ui) -- re-render last shown diagnostic
 		end
 	end
 
-	local function show_cursor_diagnostic(current_line, current_col, recompute)
-		_, prev_cursor_diagnostic =
-			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col, recompute, prev_cursor_diagnostic)
+	--- @param current_line integer The current line number.
+	--- @param current_col integer The current column number.
+	--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
+	local function show_cursor_diagnostic(current_line, current_col, recompute_ui)
+		_, prev_cursor_diagnostic = M.show_cursor_diagnostic(
+			opts,
+			bufnr,
+			current_line,
+			current_col,
+			false,
+			prev_cursor_diagnostic,
+			recompute_ui
+		)
 	end
 
+	--- @param line integer The line number to check for diagnostics.
+	--- @return boolean True if diagnostics exist at the line, false otherwise.
 	local function exists_any_diagnostics(line)
 		return M.exists_any_diagnostics(bufnr, line)
 	end
 
-	local function show_top_severity_diagnostic(line, recompute, clean_opts)
-		return M.show_top_severity_diagnostic(opts, bufnr, line, recompute, clean_opts)
+	--- @param line integer The line number to show the top severity diagnostic for.
+	--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
+	--- @return integer The line number where the diagnostic was shown.
+	local function show_top_severity_diagnostic(line, recompute_ui)
+		return M.show_top_severity_diagnostic(opts, bufnr, line, false, false, recompute_ui)
 	end
 
+	--- @param current_line integer The current line number.
+	--- @param current_col integer The current column number.
 	local function show_diagnostics(current_line, current_col)
 		clean_diagnostics(true)
 		for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
@@ -1012,6 +1063,7 @@ function M.setup_buf(bufnr, opts)
 				return
 			end
 
+			--- just moving cursor, no need to re calculate diagnostics virtual text position so we can use cache
 			local current_line, current_col = get_cursor(0)
 			if exists_any_diagnostics(current_line) then
 				if current_line == prev_line and prev_cursor_diagnostic then
@@ -1050,6 +1102,7 @@ function M.setup_buf(bufnr, opts)
 				return
 			end
 
+			extmark_cache[bufnr] = nil -- clear cache to recompute the virtual text
 			if opts.inline then
 				if prev_cursor_diagnostic then
 					show_diagnostic(prev_cursor_diagnostic)
@@ -1084,9 +1137,9 @@ function M.setup_buf(bufnr, opts)
 			if last_line_changed ~= last_line_updated_range then -- added or removed line
 				-- multiple_lines_changed = true
 				local current_line, current_col = get_cursor(0)
-				show_cursor_diagnostic(current_line, current_col)
+				show_cursor_diagnostic(current_line, current_col, true)
 			elseif prev_cursor_diagnostic then
-				show_diagnostic(prev_cursor_diagnostic)
+				show_diagnostic(prev_cursor_diagnostic, true)
 			end
 		end,
 	})
