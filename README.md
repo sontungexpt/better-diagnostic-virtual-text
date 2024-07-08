@@ -2,6 +2,9 @@
 
 A Neovim plugin for enhanced diagnostic virtual text display, aiming to provide better performance and customization options.
 
+**NOTE**: This code is currently in the testing phase and may contain bugs. If you encounter any issues, please let me know.
+I can't found it alone, so please help me to improve it.
+
 ## Features
 
 - **Ease of Use**: Effortless setup and configuration.

@@ -1006,7 +1006,9 @@ function M.setup_buf(bufnr, opts)
 				clean_diagnostics(prev_cursor_diagnostic)
 				prev_cursor_diagnostic = nil
 			elseif current_line ~= prev_line then -- opts.inline is false
-				show_top_severity_diagnostic(prev_line)
+				if exists_any_diagnostics(prev_line) then
+					show_top_severity_diagnostic(prev_line)
+				end
 			end
 
 			prev_line = current_line
