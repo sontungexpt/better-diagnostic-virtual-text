@@ -437,7 +437,7 @@ end
 --- @param bufnr integer The buffer number
 --- @param line  integer The line number
 --- @param recompute  boolean|nil Whether the diagnostics are recompute
---- @param finish_soon boolean|nil If true, then when found an diagnostic with severity 1, it will return immediately a list with only one diagnostic with severity 1. Only work if recomputed = false
+--- @param finish_soon boolean|nil If true, then when found an diagnostic with severity 1, it will return immediately a list with only one diagnostic with severity 1.
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
 function M.fetch_diagnostics(bufnr, line, recompute, finish_soon)
@@ -451,9 +451,18 @@ function M.fetch_diagnostics(bufnr, line, recompute, finish_soon)
 		if diagnostics_size == 0 then
 			return diagnostics, diagnostics_size
 		end
-		insertion_sort(diagnostics, function(d1, d2)
-			return d1.severity < d2.severity
-		end, diagnostics_size)
+
+		local sorted_diagnostics = {}
+		for i = 1, diagnostics_size do
+			local d = diagnostics[i]
+			if finish_soon and d.severity == 1 then
+				return { d }, 1
+			end
+			sorted_diagnostics = insert_sorted(sorted_diagnostics, d, function(d1, d2)
+				return d1.severity < d2.severity
+			end, i - 1)
+		end
+		diagnostics = sorted_diagnostics
 	else
 		local dc = diagnostics_cache[bufnr][line]
 		if not dc then
@@ -483,7 +492,7 @@ end
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
 --- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @param finish_soon ? boolean If true, then when found an diagnostic with severity 1 under cursor, it will return immediately a list with only one diagnostic with severity 1. Only work if recomputed = false
+--- @param finish_soon ? boolean If true, then when found an diagnostic with severity 1 under cursor, it will return immediately a list with only one diagnostic with severity 1.
 --- @return table A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
 --- @return table The full list of diagnostics for the line sorted by severity.
