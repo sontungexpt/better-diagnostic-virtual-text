@@ -266,6 +266,32 @@ NOTE : I was too lazy to write the complete API documentation, so I used ChatGPT
 - **Parameters**: None
 - **Returns**: None
 
+### `M.foreach_diagnostics_line(bufnr, callback)`
+
+Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line. Ensures compatibility with Lua versions older than 5.2 by using the default `pairs` function directly, or with a custom `pairs` function that handles diagnostic metadata.
+
+### Example
+
+```lua
+local meta_pairs = function(t)
+  local metatable = getmetatable(t)
+  if metatable and metatable.__pairs then
+      return metatable.__pairs(t)
+  end
+  return pairs(t)
+end
+```
+
+usage:
+
+```lua
+require("better-diagnostic-virtual-text").foreach_diagnostics_line(bufnr, function(line, diagnostics)
+  for _, diagnostic in meta_pairs(diagnostics) do
+    print(diagnostic.message)
+  end
+end)
+```
+
 ### `M.update_diagnostics_cache(bufnr, line, diagnostic)`
 
 - **Description**: Updates the diagnostics cache for a specific buffer and line.
@@ -423,16 +449,6 @@ Cleans diagnostics for a buffer.
 
 - **Returns:**
   - `cleared` (boolean): True if any diagnostics were cleared, false otherwise.
-
-### `M.show_diagnostics(opts, bufnr, current_line, current_col)`
-
-Displays diagnostics for a buffer, optionally cleaning existing diagnostics before showing the new one.
-
-- **Parameters:**
-  - `opts` (table): Options for displaying the diagnostic.
-  - `bufnr` (integer): The buffer number.
-  - `current_line` (integer): The current line number.
-  - `current_col` (integer): The current column number.
 
 ### `M.setup_buf(bufnr, opts)`
 
