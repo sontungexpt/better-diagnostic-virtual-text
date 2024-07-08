@@ -315,18 +315,19 @@ Clears the diagnostics extmarks for a buffer.
   - `diagnostic` (`table`): The new diagnostic to track or list of diagnostics to update.
 - **Returns**: None
 
-### `M.fetch_diagnostics(bufnr, line, recompute)`
+### `M.fetch_diagnostics(bufnr, line, recompute, finish_soon)`
 
 - **Description**: Retrieves diagnostics at a specific line in the specified buffer.
 - **Parameters**:
   - `bufnr` (`integer`): The buffer number.
   - `line` (`integer`): The line number.
   - `recompute` (`boolean`): Whether to recompute diagnostics or use cached diagnostics.
+  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic. This only works if `recomputed` is set to .
 - **Returns**:
   - `table`: List of diagnostics sorted by severity.
   - `integer`: Number of diagnostics.
 
-### `M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)`
+### `M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, finish_soon)`
 
 - **Description**: Retrieves diagnostics at the cursor position in the specified buffer.
 - **Parameters**:
@@ -334,6 +335,7 @@ Clears the diagnostics extmarks for a buffer.
   - `current_line` (`integer`): Optional. The current line number. Defaults to cursor line.
   - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
   - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
+  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic under the cursor. This only works if `recomputed` is set to false.
 - **Returns**:
   - `table`: Diagnostics at the cursor position sorted by severity.
   - `integer`: Number of diagnostics at the cursor position.

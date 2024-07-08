@@ -437,9 +437,10 @@ end
 --- @param bufnr integer The buffer number
 --- @param line  integer The line number
 --- @param recompute  boolean|nil Whether the diagnostics are recompute
+--- @param finish_soon boolean|nil If true, then when found an diagnostic with severity 1, it will return immediately a list with only one diagnostic with severity 1. Only work if recomputed = false
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
-function M.fetch_diagnostics(bufnr, line, recompute)
+function M.fetch_diagnostics(bufnr, line, recompute, finish_soon)
 	local diagnostics
 	local diagnostics_size
 
@@ -462,6 +463,9 @@ function M.fetch_diagnostics(bufnr, line, recompute)
 		diagnostics_size = 0
 
 		for k, d in meta_pairs(dc) do
+			if finish_soon and d.severity == 1 then
+				return { d }, 1
+			end
 			diagnostics, diagnostics_size = insert_sorted(diagnostics, d, function(d1, d2)
 				return d1.severity < d2.severity
 			end, diagnostics_size)
@@ -479,11 +483,12 @@ end
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
 --- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
+--- @param finish_soon ? boolean If true, then when found an diagnostic with severity 1 under cursor, it will return immediately a list with only one diagnostic with severity 1. Only work if recomputed = false
 --- @return table A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
 --- @return table The full list of diagnostics for the line sorted by severity.
 --- @return integer The number of diagnostics in the line sorted by severity.
-function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)
+function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, finish_soon)
 	if type(current_line) ~= "number" then
 		current_line = api.nvim_win_get_cursor(0)[1]
 	end
@@ -496,6 +501,9 @@ function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)
 	local cursor_diagnostics_size = 0
 	for _, d in ipairs(diagnostics) do
 		if current_col >= d.col and current_col < d.end_col then
+			if finish_soon and d.severity == 1 then
+				return { d }, 1, diagnostics, diagnostics_size
+			end
 			cursor_diagnostics_size = cursor_diagnostics_size + 1
 			cursor_diagnostics[cursor_diagnostics_size] = d
 		end
@@ -514,7 +522,8 @@ end
 --- @return table The full list of diagnostics for the line.
 --- @return integer The number of diagnostics in the list.
 function M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)
-	local cursor_diags, _, diags, diags_size = M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute)
+	local cursor_diags, _, diags, diags_size =
+		M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, true)
 	return cursor_diags[1], diags, diags_size
 end
 
@@ -915,7 +924,7 @@ end
 --- @return table The list of diagnostics at the line.
 --- @return integer The size of the diagnostics list.
 function M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute_diags, clean_opts, recompute_ui)
-	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags)
+	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags, true)
 	if not diags[1] then
 		if clean_opts then
 			M.clean_diagnostics(bufnr, clean_opts)
