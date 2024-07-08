@@ -14,14 +14,12 @@ I can't found it alone, so please help me to improve it.
 - **Performance**: Optimized for speed and efficiency, updating virtual text only when necessary.
 
 ## Preview
-- opts.inline = false. Show all diagnostics
 
+- opts.inline = false. Show all diagnostics
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/67212285-6534-4758-a943-5938500e0077
 
-
-
-- opts.inline = true. Show only curent line diagnostic
+- opts.inline = true. Show only current line diagnostic
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
@@ -74,9 +72,6 @@ local default_options = {
 	},
 	inline = true,
 }
-
-
-
 ```
 
 ### Customize ui
@@ -300,6 +295,13 @@ require("better-diagnostic-virtual-text").foreach_diagnostics_line(bufnr, functi
 end)
 ```
 
+### `M.clear_extmark_cache(bufnr)`
+
+Clears the diagnostics extmarks for a buffer.
+
+- **Parameters:**
+  - `bufnr` (integer): The buffer number to clear the diagnostics for.
+
 ### `M.update_diagnostics_cache(bufnr, line, diagnostic)`
 
 - **Description**: Updates the diagnostics cache for a specific buffer and line.
@@ -364,39 +366,6 @@ end)
 - **Returns**:
   - `table`: List of formatted chunks for virtual text display.
 
-### `M.evaluate_extmark(ui_opts)`
-
-Calculates the offset and wrap length of virtual text based on UI options.
-
-- **Parameters:**
-
-  - `ui_opts` (table): A table containing UI settings.
-    - `arrow` (string): The symbol used as the left arrow.
-    - `up_arrow` (string): The symbol used as the up arrow.
-    - `left_kept_space` (number): The space to keep on the left side.
-    - `right_kept_space` (number): The space to keep on the right side.
-    - `wrap_line_after` (number): The maximum line length to wrap after.
-    - `above` (boolean): Whether to display the virtual text above the line.
-
-- **Returns:**
-  - `is_under_min_length` (boolean): Whether the line length is under the minimum wrap length.
-  - `begin_offset` (number): The offset of the virtual text.
-  - `wrap_length` (number): The calculated wrap length.
-  - `removed_parts` (table): A table indicating which parts were removed to fit within the wrap length.
-
-### `M.generate_virtual_texts(opts, diagnostic)`
-
-Generates virtual texts and virtual lines for a diagnostic message.
-
-- **Parameters:**
-
-  - `opts` (table): Options for generating virtual texts.
-  - `diagnostic` (table): The diagnostic message to generate virtual texts for.
-
-- **Returns:**
-  - `virt_texts` (table): The list of virtual texts.
-  - `virt_lines` (table): The list of virtual lines.
-
 ### `M.exists_any_diagnostics(bufnr, line)`
 
 Checks if diagnostics exist for a buffer at a line.
@@ -409,6 +378,34 @@ Checks if diagnostics exist for a buffer at a line.
 - **Returns:**
   - `exists` (boolean): True if diagnostics exist, false otherwise.
 
+### `M.clean_diagnostics(bufnr, lines_or_diagnostic)`
+
+Cleans diagnostics for a buffer.
+
+- **Parameters:**
+
+  - `bufnr` (integer): The buffer number.
+  - `lines_or_diagnostic` (number|table): Specifies the lines or diagnostic to clean.
+
+- **Returns:**
+  - `cleared` (boolean): True if any diagnostics were cleared, false otherwise.
+
+### `M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)`
+
+Displays a diagnostic for a buffer, optionally cleaning existing diagnostics before showing the new one.
+
+- **Parameters:**
+
+  - `opts` (table): Options for displaying the diagnostic.
+  - `bufnr` (integer): The buffer number.
+  - `diagnostic` (table): The diagnostic to show.
+  - `clean_opts` (number|table|nil): Options for cleaning diagnostics before showing the new one.
+  - `recompute_ui` (boolean|nil) Whether to recompute the diagnostics. Defaults to false.
+
+- **Returns:**
+  - `shown_line` (integer): The start line of the diagnostic where it was shown.
+  - `diagnostic` (table): The diagnostic that was shown.
+
 ### `M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute, clean_opts)`
 
 Shows the highest severity diagnostic at the line for a buffer.
@@ -420,6 +417,7 @@ Shows the highest severity diagnostic at the line for a buffer.
   - `current_line` (integer): The current line number.
   - `recompute` (boolean): Whether to recompute the diagnostics.
   - `clean_opts` (number|table): Options for cleaning diagnostics before showing the new one.
+  - `recompute_ui` (boolean|nil) Whether to recompute the diagnostics. Defaults to false.
 
 - **Returns:**
   - `line_number` (integer): The line number where the diagnostic was shown.
@@ -439,6 +437,7 @@ Shows the highest severity diagnostic at the cursor position in a buffer.
   - `current_col` (integer): The current column number.
   - `recompute` (boolean): Whether to recompute the diagnostics.
   - `clean_opts` (number|table): Options for cleaning diagnostics before showing the new one.
+  - `recompute_ui` (boolean|nil) Whether to recompute the diagnostics. Defaults to false.
 
 - **Returns:**
   - `line_number` (integer): The line number where the diagnostic was shown.
@@ -446,17 +445,16 @@ Shows the highest severity diagnostic at the cursor position in a buffer.
   - `diagnostics_list` (table): The list of diagnostics at the cursor position.
   - `size` (integer): The size of the diagnostics list.
 
-### `M.clean_diagnostics(bufnr, lines_or_diagnostic)`
+### `M.get_line_shown(diagnostic)`
 
-Cleans diagnostics for a buffer.
+Returns the line number where the diagnostic was shown.
 
 - **Parameters:**
 
-  - `bufnr` (integer): The buffer number.
-  - `lines_or_diagnostic` (number|table): Specifies the lines or diagnostic to clean.
+  - `diagnostic` (table): The diagnostic.
 
 - **Returns:**
-  - `cleared` (boolean): True if any diagnostics were cleared, false otherwise.
+  - `line_shown` (integer): The line number where the diagnostic was shown.
 
 ### `M.setup_buf(bufnr, opts)`
 
@@ -472,32 +470,6 @@ Sets up the module to handle diagnostic rendering and interaction globally.
 
 - **Parameters:**
   - `opts` (table): Options for setting up the module.
-
-### `M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)`
-
-Displays a diagnostic for a buffer, optionally cleaning existing diagnostics before showing the new one.
-
-- **Parameters:**
-
-  - `opts` (table): Options for displaying the diagnostic.
-  - `bufnr` (integer): The buffer number.
-  - `diagnostic` (table): The diagnostic to show.
-  - `clean_opts` (number|table|nil): Options for cleaning diagnostics before showing the new one.
-
-- **Returns:**
-  - `shown_line` (integer): The start line of the diagnostic where it was shown.
-  - `diagnostic` (table): The diagnostic that was shown.
-
-### `M.get_line_shown(diagnostic)`
-
-Returns the line number where the diagnostic was shown.
-
-- **Parameters:**
-
-  - `diagnostic` (table): The diagnostic.
-
-- **Returns:**
-  - `line_shown` (integer): The line number where the diagnostic was shown.
 
 ## License
 
