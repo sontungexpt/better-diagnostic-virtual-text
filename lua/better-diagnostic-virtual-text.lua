@@ -708,7 +708,6 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 		msgs, size = wrap_text(diagnostic.message, wrap_length)
 		extmark_cache[bufnr][diagnostic] = { should_display_below, offset, wrap_length, removed_parts, msgs, size }
 	else
-		print("cache")
 		should_display_below, offset, wrap_length, removed_parts, msgs, size =
 			cache[1], cache[2], cache[3], cache[4], cache[5], cache[6]
 	end
