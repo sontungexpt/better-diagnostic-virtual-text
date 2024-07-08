@@ -23,6 +23,14 @@ https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/67
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
+- opts.ui.above = true. Show the diagnostic above the line
+
+
+https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/c2c30f61-6e9b-4986-a27f-21c916f7e1bd
+
+
+
+
 - Test with tokyonight theme
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/4e0f6306-0fc4-4fb4-b46f-107b8c40e46c
