@@ -25,11 +25,7 @@ https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef
 
 - opts.ui.above = true. Show the diagnostic above the line
 
-
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/c2c30f61-6e9b-4986-a27f-21c916f7e1bd
-
-
-
 
 - Test with tokyonight theme
 
@@ -330,7 +326,7 @@ Clears the diagnostics extmarks for a buffer.
   - `bufnr` (`integer`): The buffer number.
   - `line` (`integer`): The line number.
   - `recompute` (`boolean`): Whether to recompute diagnostics or use cached diagnostics.
-  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic. This only works if `recomputed` is set to .
+  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic.
 - **Returns**:
   - `table`: List of diagnostics sorted by severity.
   - `integer`: Number of diagnostics.
@@ -343,7 +339,7 @@ Clears the diagnostics extmarks for a buffer.
   - `current_line` (`integer`): Optional. The current line number. Defaults to cursor line.
   - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
   - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
-  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic under the cursor. This only works if `recomputed` is set to false.
+  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic under the cursor.
 - **Returns**:
   - `table`: Diagnostics at the cursor position sorted by severity.
   - `integer`: Number of diagnostics at the cursor position.
