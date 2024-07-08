@@ -8,12 +8,18 @@ local TAB_LENGTH = strdisplaywidth("\t")
 
 local meta_pairs = function(t)
 	local metatable = getmetatable(t)
-	return metatable and metatable.__pairs and metatable.__pairs(t) or pairs(t)
+	if metatable and metatable.__pairs then
+		return metatable.__pairs(t)
+	end
+	return pairs(t)
 end
 
 local meta_ipairs = function(t)
 	local metatable = getmetatable(t)
-	return metatable and metatable.__ipairs and metatable.__ipairs(t) or ipairs(t)
+	if metatable and metatable.__ipairs then
+		return metatable.__ipairs(t)
+	end
+	return ipairs(t)
 end
 
 local make_group_name = function(bufnr)
@@ -94,8 +100,7 @@ do
 	--- @param line integer The line number
 	--- @param diagnostic table The new diagnostic to add to cache, or a list to update the line
 	function diagnostics_cache.update_line(bufnr, line, diagnostic)
-		local exists_diags_bufnr = diagnostics_cache[bufnr]
-		exists_diags_bufnr[line] = diagnostic
+		diagnostics_cache[bufnr][line] = diagnostic
 	end
 
 	setmetatable(diagnostics_cache, {
@@ -183,13 +188,15 @@ do
 										end,
 										__ipairs = function(t1)
 											local k = nil
-											return function(_, idx, v)
+											local idx = 0
+											return function(_, _, v)
 												k, v = next(t1, k)
 												if k == 0 then
 													k, v = next(t1, k)
 												end
 												if k then
-													return (idx or 0) + 1, v
+													idx = idx + 1
+													return idx, v
 												end
 											end
 										end,
@@ -451,51 +458,52 @@ end
 --- @param bufnr integer The buffer number
 --- @param line  integer The line number
 --- @param recompute  boolean|nil Whether the diagnostics are recompute
---- @param finish_soon boolean|nil If true, then when found an diagnostic with severity 1, it will return immediately a list with only one diagnostic with severity 1.
+--- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+--- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon() return true or severity 1 diagnostic is found under the cursor if finish_soon is not a function. When stop immediately the return value is the list with only found diagnostic. This parmater just work if comparator is provided or recompute = false
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
-function M.fetch_diagnostics(bufnr, line, recompute, finish_soon)
-	local diagnostics
-	local diagnostics_size
-
+function M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)
 	if recompute then
-		diagnostics = diag.get(bufnr, { lnum = line - 1 })
-		diagnostics_size = #diagnostics
+		local diagnostics = diag.get(bufnr, { lnum = line - 1 })
 		diagnostics_cache[bufnr][line] = diagnostics
-		if diagnostics_size == 0 then
+		local diagnostics_size = #diagnostics
+		if diagnostics_size == 0 or type(comparator) ~= "function" then
 			return diagnostics, diagnostics_size
 		end
-
 		local sorted_diagnostics = {}
 		for i = 1, diagnostics_size do
 			local d = diagnostics[i]
-			if finish_soon and d.severity == 1 then
+			if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
 				return { d }, 1
 			end
-			sorted_diagnostics = insert_sorted(sorted_diagnostics, d, function(d1, d2)
-				return d1.severity < d2.severity
-			end, i - 1)
+			sorted_diagnostics = insert_sorted(sorted_diagnostics, d, comparator, i - 1)
 		end
-		diagnostics = sorted_diagnostics
+		return sorted_diagnostics, diagnostics_size
 	else
 		local dc = diagnostics_cache[bufnr][line]
 		if not dc then
 			return {}, 0
 		end
-		diagnostics = {}
-		diagnostics_size = 0
-
-		for k, d in meta_pairs(dc) do
-			if finish_soon and d.severity == 1 then
-				return { d }, 1
+		local diagnostics = {}
+		if type(comparator) ~= "function" then
+			for i, d in meta_ipairs(dc) do
+				if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
+					return { d }, 1
+				end
+				diagnostics[i] = d
 			end
-			diagnostics, diagnostics_size = insert_sorted(diagnostics, d, function(d1, d2)
-				return d1.severity < d2.severity
-			end, diagnostics_size)
+			return diagnostics, dc[0]
+		else
+			local diagnostics_size = 0
+			for _, d in meta_pairs(dc) do
+				if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
+					return { d }, 1
+				end
+				diagnostics, diagnostics_size = insert_sorted(diagnostics, d, comparator, diagnostics_size)
+			end
+			return diagnostics, diagnostics_size
 		end
 	end
-
-	return diagnostics, diagnostics_size
 end
 
 ---
@@ -506,16 +514,17 @@ end
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
 --- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @param finish_soon ? boolean If true, then when found an diagnostic with severity 1 under cursor, it will return immediately a list with only one diagnostic with severity 1.
+--- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+--- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon() return true or severity 1 diagnostic is found under the cursor if finish_soon is not a function. When stop immediately the return value is the list with only found diagnostic. This parmater just work if comparator is provided
 --- @return table A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
 --- @return table The full list of diagnostics for the line sorted by severity.
 --- @return integer The number of diagnostics in the line sorted by severity.
-function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, finish_soon)
+function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, comparator, finish_soon)
 	if type(current_line) ~= "number" then
 		current_line = api.nvim_win_get_cursor(0)[1]
 	end
-	local diagnostics, diagnostics_size = M.fetch_diagnostics(bufnr, current_line, recompute)
+	local diagnostics, diagnostics_size = M.fetch_diagnostics(bufnr, current_line, recompute, comparator)
 
 	if type(current_col) ~= "number" then
 		current_col = api.nvim_win_get_cursor(0)[2]
@@ -524,7 +533,7 @@ function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute,
 	local cursor_diagnostics_size = 0
 	for _, d in ipairs(diagnostics) do
 		if current_col >= d.col and current_col < d.end_col then
-			if finish_soon and d.severity == 1 then
+			if finish_soon and (type(finish_soon) == "function" and finish_soon() or d.severity == 1) then
 				return { d }, 1, diagnostics, diagnostics_size
 			end
 			cursor_diagnostics_size = cursor_diagnostics_size + 1
@@ -545,8 +554,16 @@ end
 --- @return table The full list of diagnostics for the line.
 --- @return integer The number of diagnostics in the list.
 function M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)
-	local cursor_diags, _, diags, diags_size =
-		M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, true)
+	local cursor_diags, _, diags, diags_size = M.fetch_cursor_diagnostics(
+		bufnr,
+		current_line,
+		current_col,
+		recompute,
+		function(d1, d2)
+			return d1.severity < d2.severity
+		end,
+		true
+	)
 	return cursor_diags[1], diags, diags_size
 end
 
@@ -947,7 +964,9 @@ end
 --- @return table The list of diagnostics at the line.
 --- @return integer The size of the diagnostics list.
 function M.show_top_severity_diagnostic(opts, bufnr, current_line, recompute_diags, clean_opts, recompute_ui)
-	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags, true)
+	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags, function(d1, d2)
+		return d1.severity < d2.severity
+	end, true)
 	if not diags[1] then
 		if clean_opts then
 			M.clean_diagnostics(bufnr, clean_opts)
