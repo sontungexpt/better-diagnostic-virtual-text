@@ -47,7 +47,7 @@ Add the following to your `init.lua` or `init.vim`:
 -- or better ways configure in on_attach of lsp client
 M.on_attach = function(client, bufnr)
     -- nil can replace with the options of each buffer
-	require("better-diagnostic-virtual-text").setup_buf(bufnr, nil)
+	require("better-diagnostic-virtual-text.api").setup_buf(bufnr, nil)
 
     --- ... other config for lsp client
 	lsp.handlers["textDocument/signatureHelp"] = lsp.with(lsp.handlers.signature_help, {
@@ -117,7 +117,7 @@ Override this function before setup the plugin.
 --- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
-require("better-diagnostic-virtual-text").format_line_chunks = function(
+require("better-diagnostic-virtual-text.api").format_line_chunks = function(
     ui_opts,
     line_idx,
     line_msg,
