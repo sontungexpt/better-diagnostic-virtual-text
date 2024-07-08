@@ -8,10 +8,12 @@ local TAB_LENGTH = strdisplaywidth("\t")
 
 local meta_pairs = function(t)
 	local metatable = getmetatable(t)
-	if metatable and metatable.__pairs then
-		return metatable.__pairs(t)
-	end
-	return pairs(t)
+	return metatable and metatable.__pairs and metatable.__pairs(t) or pairs(t)
+end
+
+local meta_ipairs = function(t)
+	local metatable = getmetatable(t)
+	return metatable and metatable.__ipairs and metatable.__ipairs(t) or ipairs(t)
 end
 
 local make_group_name = function(bufnr)
@@ -177,6 +179,18 @@ do
 													return next(t1, k)
 												end
 												return k, v
+											end
+										end,
+										__ipairs = function(t1)
+											local k = nil
+											return function(_, idx, v)
+												k, v = next(t1, k)
+												if k == 0 then
+													k, v = next(t1, k)
+												end
+												if k then
+													return (idx or 0) + 1, v
+												end
 											end
 										end,
 									})
