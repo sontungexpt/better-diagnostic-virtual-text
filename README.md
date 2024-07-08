@@ -319,19 +319,23 @@ Clears the diagnostics extmarks for a buffer.
   - `diagnostic` (`table`): The new diagnostic to track or list of diagnostics to update.
 - **Returns**: None
 
-### `M.fetch_diagnostics(bufnr, line, recompute, finish_soon)`
+### `M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)`
 
 - **Description**: Retrieves diagnostics at a specific line in the specified buffer.
 - **Parameters**:
   - `bufnr` (`integer`): The buffer number.
   - `line` (`integer`): The line number.
-  - `recompute` (`boolean`): Whether to recompute diagnostics or use cached diagnostics.
-  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic.
+  - `recompute` (`boolean|nil`): Whether to recompute the diagnostics.
+  - `comparator` (`function|nil`): The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+  - `finish_soon` (`boolean|function|nil`): If true, stops processing when a severity 1 diagnostic is found under the cursor. If `finish_soon` is a function, it stops processing when `finish_soon()` returns true. When it stops immediately, it returns a list with only the found diagnostic. This parameter works only if `comparator` is provided or `recompute` is false.
 - **Returns**:
+
   - `table`: List of diagnostics sorted by severity.
   - `integer`: Number of diagnostics.
 
-### `M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, finish_soon)`
+  **Note: if finish_soon == true, the list will only has one diagnostic fit the condition.**
+
+### `M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, comparator, finish_soon)`
 
 - **Description**: Retrieves diagnostics at the cursor position in the specified buffer.
 - **Parameters**:
@@ -339,12 +343,16 @@ Clears the diagnostics extmarks for a buffer.
   - `current_line` (`integer`): Optional. The current line number. Defaults to cursor line.
   - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
   - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
-  - `finish_soon` (`boolean|nil`): If set to true, the function will immediately return a list containing only one diagnostic with severity level 1 upon encountering such a diagnostic under the cursor.
+  - `comparator` (`function|nil`): The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+  - `finish_soon` (`boolean|function|nil`): If true, stops processing when a severity 1 diagnostic is found under the cursor. If `finish_soon` is a function, it stops processing when `finish_soon()` returns true. When it stops immediately, it returns a list with only the found diagnostic. This parameter works only if `comparator` is provided or `recompute` is false.
 - **Returns**:
+
   - `table`: Diagnostics at the cursor position sorted by severity.
   - `integer`: Number of diagnostics at the cursor position.
   - `table`: Full list of diagnostics for the line sorted by severity.
   - `integer`: Number of diagnostics in the line sorted by severity.
+
+  **Note: if finish_soon == true, the list will only has one diagnostic fit the condition.**
 
 ### `M.fetch_top_cursor_diagnostic(bufnr, current_line, current_col, recompute)`
 
@@ -483,7 +491,7 @@ Sets up the module to handle diagnostic rendering and interaction globally.
 
 ## License
 
-MIT[License](./LICENSE)
+MIT [License](./LICENSE)
 
 ## Contributors
 

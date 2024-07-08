@@ -51,10 +51,21 @@ local extmark_cache = setmetatable({}, {
 		return t[bufnr]
 	end,
 })
--- @type table<integer, table<integer, table<string, table>>>>
--- bufnr -> line -> address of diagnostic -> diagnostic
 local diagnostics_cache = {}
 do
+	--- @type table<integer, table>
+	--- ex:
+	--- {
+	---   [`1`] = {
+	---     [`1`] = {
+	---       [`0`] = 1, -- number of diagnostics in the line
+	---       [`vim.Diagnostic`] = vim.Diagnostic,
+	---       [`vim.Diagnostic`] = vim.Diagnostic,
+	---     }
+	---   [`2`] = {
+	---   ...
+	---   }
+	--- }
 	local real_diagnostics_cache = {}
 
 	--- This function is used to inspect the diagnostics cache for debug
@@ -66,6 +77,9 @@ do
 		return clone_table
 	end
 
+	--- Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line.
+	--- @param bufnr integer The buffer number for which to iterate through diagnostics.
+	--- @param callback function The callback function to call for each line of diagnostics, with parameters `(line, diagnostics)`.
 	function diagnostics_cache.foreach_line(bufnr, callback)
 		local buf_diagnostics = real_diagnostics_cache[bufnr]
 		if not buf_diagnostics then
@@ -79,6 +93,8 @@ do
 		pairs = raw_pairs
 	end
 
+	--- Check if the diagnostics cache exist for a buffer
+	--- @param bufnr integer The buffer number
 	function diagnostics_cache.exist(bufnr)
 		return real_diagnostics_cache[bufnr] ~= nil
 	end
@@ -115,22 +131,37 @@ do
 			if real_diagnostics_cache[bufnr] then
 				return real_diagnostics_cache[bufnr]
 			else
-				local lines = {}
-				local proxy_table = {}
+				---@type table<integer, table<table|integer, vim.Diagnostic>>
+				--- ex:
+				--- {
+				---  [`1`] = {
+				---    [`0`] = 1, -- number of diagnostics in the line
+				---    [`vim.Diagnostic`] = vim.Diagnostic,
+				---    [`vim.Diagnostic`] = vim.Diagnostic,
+				---  }
+				---  [`2`] = {
+				---    [`0`] = 1, -- number of diagnostics in the line
+				---    [`vim.Diagnostic`] = vim.Diagnostic,
+				---    [`vim.Diagnostic`] = vim.Diagnostic,
+				---  }
+				--- }
+				---
+				local buffer = {}
+				local proxy_buffer = {}
 
 				-- This function is used to inspect the diagnostics cache for debug
-				function proxy_table.real()
-					return lines
+				function proxy_buffer.real()
+					return buffer
 				end
 
-				real_diagnostics_cache[bufnr] = setmetatable(proxy_table, {
+				real_diagnostics_cache[bufnr] = setmetatable(proxy_buffer, {
 					__pairs = function(_)
 						---@diagnostic disable: redundant-return-value
-						return pairs(lines)
+						return pairs(buffer)
 					end,
 
 					__index = function(_, line)
-						return lines[line]
+						return buffer[line]
 					end,
 
 					--- Tracks the existence of diagnostics for a buffer at a line.
@@ -139,7 +170,7 @@ do
 					__newindex = function(t, line, diagnostic)
 						if diagnostic == nil or not next(diagnostic) then
 							-- Untrack this line if `diagnostic` is nil or an empty table.
-							local line_diags = lines[line]
+							local line_diags = buffer[line]
 							if line_diags then
 								for _, d in meta_pairs(line_diags) do
 									local lnum, end_lnum = d.lnum + 1, d.end_lnum + 1
@@ -147,12 +178,12 @@ do
 									-- If not the diagnostic still exists and should not be removed
 									if line == lnum then
 										for i = lnum, end_lnum do
-											local line_i_diags = lines[i]
+											local line_i_diags = buffer[i]
 											if line_i_diags and line_i_diags[d] and line_i_diags[0] > 1 then
 												line_i_diags[d] = nil
 												line_i_diags[0] = line_i_diags[0] - 1
 											else
-												lines[i] = nil
+												buffer[i] = nil
 											end
 										end
 									end
@@ -168,39 +199,52 @@ do
 							-- Ensure the diagnostic is not an empty table.
 							local end_lnum = diagnostic.end_lnum + 1 -- change to 1-based
 							for i = line, end_lnum do
-								local line_i_diags = lines[i]
+								local line_i_diags = buffer[i]
 								if not line_i_diags then
-									lines[i] = setmetatable({
-										[0] = 1,
-										[diagnostic] = diagnostic,
-									}, {
-										__len = function(t1)
-											return t1[0]
-										end,
-										__pairs = function(t1)
-											return function(_, k, v)
-												k, v = next(t1, k)
-												if k == 0 then
-													return next(t1, k)
-												end
-												return k, v
-											end
-										end,
-										__ipairs = function(t1)
-											local k = nil
-											local idx = 0
-											return function(_, _, v)
-												k, v = next(t1, k)
-												if k == 0 then
+									buffer[i] = setmetatable(
+										---@type table<table|integer, vim.Diagnostic>
+										---@key integer `0` The number of diagnostics in the line
+										---@key vim.Diagnostic The diagnostic
+										---@value vim.Diagnostic The diagnostic
+										---ex:
+										---{
+										---  [`0`] = 1, -- number of diagnostics in the line
+										---  [`vim.Diagnostic`] = vim.Diagnostic,
+										---  [`vim.Diagnostic`] = vim.Diagnostic,
+										---}
+										{
+											[0] = 1,
+											[diagnostic] = diagnostic,
+										},
+										{
+											__len = function(t1)
+												return t1[0]
+											end,
+											__pairs = function(t1)
+												return function(_, k, v)
 													k, v = next(t1, k)
+													if k == 0 then
+														return next(t1, k)
+													end
+													return k, v
 												end
-												if k then
-													idx = idx + 1
-													return idx, v
+											end,
+											__ipairs = function(t1)
+												local k = nil
+												local idx = 0
+												return function(_, _, v)
+													k, v = next(t1, k)
+													if k == 0 then
+														k, v = next(t1, k)
+													end
+													if k then
+														idx = idx + 1
+														return idx, v
+													end
 												end
-											end
-										end,
-									})
+											end,
+										}
+									)
 								elseif not line_i_diags[diagnostic] then
 									line_i_diags[diagnostic] = diagnostic
 									line_i_diags[0] = line_i_diags[0] + 1
@@ -209,7 +253,7 @@ do
 						end
 					end,
 				})
-				return proxy_table
+				return proxy_buffer
 			end
 		end,
 	})
