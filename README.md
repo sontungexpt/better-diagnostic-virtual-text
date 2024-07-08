@@ -14,6 +14,14 @@ I can't found it alone, so please help me to improve it.
 - **Performance**: Optimized for speed and efficiency, updating virtual text only when necessary.
 
 ## Preview
+- opts.inline = false. Show all diagnostics
+
+
+https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/67212285-6534-4758-a943-5938500e0077
+
+
+
+- opts.inline = true. Show only curent line diagnostic
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
