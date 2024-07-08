@@ -45,9 +45,22 @@ do
 	function diagnostics_cache.inspect()
 		local clone_table = {}
 		for bufnr, diagnostics in pairs(real_diagnostics_cache) do
-			clone_table[bufnr] = diagnostics.inspect()
+			clone_table[bufnr] = diagnostics.real()
 		end
 		return clone_table
+	end
+
+	function diagnostics_cache.foreach_line(bufnr, callback)
+		local buf_diagnostics = real_diagnostics_cache[bufnr]
+		if not buf_diagnostics then
+			return
+		end
+		local raw_pairs = pairs
+		pairs = meta_pairs
+		for line, diagnostics in meta_pairs(buf_diagnostics.real()) do
+			callback(line, diagnostics)
+		end
+		pairs = raw_pairs
 	end
 
 	function diagnostics_cache.exist(bufnr)
@@ -90,7 +103,7 @@ do
 				local proxy_table = {}
 
 				-- This function is used to inspect the diagnostics cache for debug
-				function proxy_table.inspect()
+				function proxy_table.real()
 					return lines
 				end
 
@@ -193,6 +206,30 @@ function M.inspect_cache()
 	vim.schedule(function()
 		vim.notify(vim.inspect(diagnostics_cache.inspect()), vim.log.levels.INFO, { title = "Diagnostics Cache" })
 	end)
+end
+
+---
+--- Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line.
+--- Ensures compatibility with Lua versions older than 5.2 by using the default `pairs` function directly, or with a custom `pairs` function that handles diagnostic metadata.
+---
+--- Example:
+--- ```lua
+--- local meta_pairs = function(t)
+---   local metatable = getmetatable(t)
+---   if metatable and metatable.__pairs then
+---       return metatable.__pairs(t)
+---   end
+---   return pairs(t)
+--- end
+--- ```
+---
+--- If you choose not to use the above custom `meta_pairs` function, ensure that you check and skip the key `0` in the loop of diagnostics within the callback function to avoid errors.
+--- The key `0` is used to store the number of diagnostics in the line.
+---
+--- @param bufnr integer The buffer number for which to iterate through diagnostics.
+--- @param callback function The callback function to call for each line of diagnostics, with parameters `(line, diagnostics)`.
+function M.foreach_diagnostics_line(bufnr, callback)
+	diagnostics_cache.foreach_line(bufnr, callback)
 end
 
 --- Updates the diagnostics cache
@@ -322,38 +359,26 @@ local space = function(num)
 		return string.rep(" ", num)
 	end
 
-	local reps = {
-		" ",
-		"  ",
-		"   ",
-		"    ",
-		"     ",
-		"      ",
-		"       ",
-		"        ",
-		"         ",
-		"          ",
-		"           ",
-		"            ",
-		"             ",
-		"              ",
-		"               ",
-		"                ",
-	}
 	if num % 2 == 0 then
+		-- 2, 4, 6, 8, 10, 12, 14, 16
+		local pre_computes =
+			{ "  ", "    ", "      ", "        ", "          ", "            ", "              ", "                " }
 		for i = 16, 4, -2 do
 			if num % i == 0 then
-				return string.rep(reps[i], num / i)
+				return string.rep(pre_computes[i], num / i / 2)
 			end
 		end
-		return string.rep(reps[2], num / 2)
+		return string.rep(pre_computes[1], num / 2)
 	else
+		-- 1, 3, 5, 7, 9, 11, 13, 15
+		local pre_computes =
+			{ " ", "   ", "     ", "       ", "         ", "           ", "             ", "               " }
 		for i = 15, 3, -2 do
 			if num % i == 0 then
-				return string.rep(reps[i], num / i)
+				return string.rep(pre_computes[i], (num / i - 1) / 2)
 			end
 		end
-		return string.rep(reps[1], num)
+		return string.rep(pre_computes[1], num)
 	end
 end
 
@@ -572,15 +597,17 @@ end
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
 ---     - above: Whether to display the virtual text above the line.
+--- @param line_num ? integer The line number to evaluate. If not provided, the current line is used.
 --- @return boolean is_under_min_length Whether the line length is under the minimum wrap length.
 --- @return number begin_offset The offset of the virtual text.
 --- @return number wrap_length The calculated wrap length.
 --- @return table removed_parts A table indicating which parts were removed to fit within the wrap length.
-local function evaluate_extmark(ui_opts)
+local function evaluate_extmark(ui_opts, line_num)
 	local window_info = fn.getwininfo(api.nvim_get_current_win())[1] -- First entry
 	local text_area_width = window_info.width - window_info.textoff
-	local current_line = api.nvim_get_current_line()
-	local offset = strdisplaywidth(current_line)
+	local line_text = line_num and api.nvim_buf_get_lines(0, line_num - 1, line_num, false)[1]
+		or api.nvim_get_current_line()
+	local offset = strdisplaywidth(line_text)
 
 	-- Minimum length to be able to create beautiful virtual text
 	-- Get the text_area_width in case the window is too narrow
@@ -597,7 +624,7 @@ local function evaluate_extmark(ui_opts)
 	local free_space
 	local arrow_length
 	if is_under_min_length then
-		local init_spaces, only_space = count_initial_spaces(current_line)
+		local init_spaces, only_space = count_initial_spaces(line_text)
 		offset = only_space and 0 or init_spaces
 		free_space = text_area_width
 		arrow_length = up_arrow_length
@@ -654,12 +681,13 @@ end
 --- @param diagnostic table The diagnostic message to generate the virtual texts for.
 --- @return table The list of virtual texts.
 --- @return table The list of virtual lines.
+--- @return number The offset of the virtual text.
 local function generate_virtual_texts(opts, diagnostic)
 	local ui = opts.ui
-	local should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui)
+	local should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui, diagnostic.lnum + 1)
 	local msgs, size = wrap_text(diagnostic.message, wrap_length)
 	if size == 0 then
-		return {}, {}
+		return {}, {}, offset
 	end
 
 	local severity = diagnostic.severity
@@ -683,7 +711,7 @@ local function generate_virtual_texts(opts, diagnostic)
 	)
 	if should_display_below then
 		if size == 1 then
-			return {}, { virt_text }
+			return {}, { virt_text }, offset
 		end
 		virt_lines[initial_idx] = virt_text
 		virt_text = {}
@@ -727,7 +755,7 @@ local function generate_virtual_texts(opts, diagnostic)
 		end
 	end
 
-	return virt_text, virt_lines
+	return virt_text, virt_lines, offset
 end
 
 --- Checks if diagnostics exist for a buffer at a line.
@@ -795,13 +823,20 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts)
 		M.clean_diagnostics(bufnr, clean_opts)
 	end
 	opts = opts or default_options
-	local virt_text, virt_lines = generate_virtual_texts(opts, diagnostic)
+	local virt_text, virt_lines, offset = generate_virtual_texts(opts, diagnostic)
 	local virtline = diagnostic.lnum
+	local max_buf_line = api.nvim_buf_line_count(bufnr)
+	if virtline + 1 > max_buf_line then
+		virtline = max_buf_line
+	end
+
 	local shown_line = api.nvim_buf_set_extmark(bufnr, ns, virtline, 0, {
 		id = virtline + 1,
 		virt_text = virt_text,
+		virt_text_win_col = offset,
 		virt_lines = virt_lines,
 		virt_lines_above = opts.ui.above,
+		invalidate = virtline + 1 > max_buf_line,
 		priority = 2003,
 		virt_text_pos = "eol",
 		line_hl_group = "CursorLine",
@@ -861,17 +896,6 @@ function M.get_line_shown(diagnostic)
 	return diagnostic.lnum + 1
 end
 
-function M.show_diagnostics(opts, bufnr, current_line, current_col)
-	M.clean_diagnostics(bufnr, true)
-	for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
-		if line == current_line then
-			M.show_cursor_diagnostic(opts, bufnr, current_line, current_col)
-		else
-			M.show_top_severity_diagnostic(opts, bufnr, line)
-		end
-	end
-end
-
 --- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 function M.setup_buf(bufnr, opts)
@@ -894,6 +918,7 @@ function M.setup_buf(bufnr, opts)
 		diagnostics_cache.update(bufnr)
 	end
 
+	-- declare shadowed functions for each buffer
 	local function clean_diagnostics(lines_or_diagnostic)
 		M.clean_diagnostics(bufnr, lines_or_diagnostic)
 	end
@@ -997,10 +1022,10 @@ function M.setup_buf(bufnr, opts)
 					show_cursor_diagnostic(current_line, current_col)
 				else -- opts.inline is false
 					prev_cursor_diagnostic = nil -- remove previous cursor diagnostic cache to make sure this diagnostic is shown
+					show_cursor_diagnostic(current_line, current_col)
 					if exists_any_diagnostics(prev_line) then
 						show_top_severity_diagnostic(prev_line) -- change last line diagnostic to top severity diagnostic
 					end
-					show_cursor_diagnostic(current_line, current_col)
 				end
 			elseif opts.inline then
 				clean_diagnostics(prev_cursor_diagnostic)
