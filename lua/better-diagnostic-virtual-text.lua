@@ -864,7 +864,6 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 		virt_lines_above = opts.ui.above,
 		invalidate = virtline + 1 > max_buf_line,
 		priority = 2003,
-		virt_text_pos = "eol",
 		line_hl_group = "CursorLine",
 	})
 	return shown_line, diagnostic
