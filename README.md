@@ -23,6 +23,10 @@ https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/67
 
 https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/ef3d49fb-1a47-46c3-81ba-d23df70eced9
 
+- Test with tokyonight theme
+
+https://github.com/sontungexpt/better-diagnostic-virtual-text/assets/92097639/4e0f6306-0fc4-4fb4-b46f-107b8c40e46c
+
 ## Installation
 
 You need to set vim.diagnostic.config({ virtual_text = false }), to not have all diagnostics in the buffer displayed conflict.
