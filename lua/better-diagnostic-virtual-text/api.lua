@@ -983,6 +983,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 		id = virtline + 1,
 		virt_text = virt_text,
 		virt_text_win_col = offset,
+		virt_text_pos = "overlay",
 		virt_lines = virt_lines,
 		virt_lines_above = opts.ui.above,
 		invalidate = virtline + 1 > max_buf_line,

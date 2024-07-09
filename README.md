@@ -72,8 +72,6 @@ end
 local default_options = {
 	ui = {
 		wrap_line_after = false, -- Wrap the line after this length to avoid the virtual text is too long
-		left_text_space = 2, -- The left at the left side of the text in each line
-		right_text_space = 2, -- The right at the right side of the text in each line
 		left_kept_space = 3, --- The number of spaces kept on the left side of the virtual text, make sure it enough to custom for each line
 		right_kept_space = 3, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
 		arrow = "  ",
