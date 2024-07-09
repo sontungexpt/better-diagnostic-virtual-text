@@ -30,9 +30,10 @@ local M = {}
 
 local default_options = {
 	ui = {
-		wrap_line_after = false,
+		-- number or false
+		wrap_line_after = false, -- Wrap the line after this length to avoid the virtual text is too long
 		left_kept_space = 3, --- The number of spaces kept on the left side of the virtual text, make sure it enough to custom for each line
-		right_kept_space = 3, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
+		right_kept_space = 2, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
 		arrow = "  ",
 		up_arrow = "  ",
 		down_arrow = "  ",
@@ -619,6 +620,7 @@ end
 --- @param ui_opts table - The table of UI options. Should contain:
 ---     - arrow: The symbol used as the left arrow.
 ---     - up_arrow: The symbol used as the up arrow.
+---     - down_arrow: The symbol used as the down arrow.
 ---     - left_kept_space: The space to keep on the left side.
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
@@ -716,7 +718,10 @@ function M.format_line_chunks(
 		})
 	end
 
-	tbl_insert(chunks, { line_msg, message_highlight })
+	tbl_insert(chunks, {
+		line_msg,
+		message_highlight,
+	})
 
 	if not removed_parts.right_kept_space then
 		local last_space = space(max_line_length - strdisplaywidth(line_msg) + ui_opts.right_kept_space)
@@ -735,15 +740,16 @@ end
 --- @param ui_opts table A table containing UI settings, including:
 ---     - arrow: The symbol used as the left arrow.
 ---     - up_arrow: The symbol used as the up arrow.
+---     - down_arrow: The symbol used as the down arrow.
 ---     - left_kept_space: The space to keep on the left side.
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
 ---     - above: Whether to display the virtual text above the line.
 --- @param line_num ? integer The line number to evaluate. If not provided, the current line is used.
---- @return boolean is_under_min_length Whether the line length is under the minimum wrap length.
---- @return number begin_offset The offset of the virtual text.
---- @return number wrap_length The calculated wrap length.
---- @return table removed_parts A table indicating which parts were removed to fit within the wrap length.
+--- @return boolean Whether the virtual text should be displayed below the line.
+--- @return number The offset of the virtual text.
+--- @return number The calculated wrap length.
+--- @return table A table indicating which parts were removed to fit within the wrap length.
 local function evaluate_extmark(ui_opts, line_num)
 	local window_info = fn.getwininfo(api.nvim_get_current_win())[1] -- First entry
 	local text_area_width = window_info.width - window_info.textoff
@@ -756,8 +762,9 @@ local function evaluate_extmark(ui_opts, line_num)
 	local MIN_WRAP_LENGTH = math.min(text_area_width, 14)
 
 	local left_arrow_length = strdisplaywidth(ui_opts.arrow)
-	local up_arrow_length = strdisplaywidth(ui_opts.up_arrow)
-	local is_under_min_length = text_area_width - offset
+	local up_arrow_length = strdisplaywidth(ui_opts.above and ui_opts.down_arrow or ui_opts.up_arrow)
+
+	local should_display_below = text_area_width - offset
 		< MIN_WRAP_LENGTH
 			+ ui_opts.left_kept_space
 			+ ui_opts.right_kept_space
@@ -765,7 +772,7 @@ local function evaluate_extmark(ui_opts, line_num)
 
 	local free_space
 	local arrow_length
-	if is_under_min_length then
+	if should_display_below then
 		local init_spaces, only_space = count_initial_spaces(line_text)
 		offset = only_space and 0 or init_spaces
 		free_space = text_area_width
@@ -791,6 +798,7 @@ local function evaluate_extmark(ui_opts, line_num)
 		left_kept_space = false, -- check if left_kept_space is removed
 		arrow = false, -- check if arrow is removed
 	}
+
 	local removed_order = 1
 	local part = removed_parts[removed_order]
 	while wrap_length < MIN_WRAP_LENGTH and part do
@@ -800,18 +808,7 @@ local function evaluate_extmark(ui_opts, line_num)
 		part = removed_parts[removed_order]
 	end
 
-	if wrap_length < MIN_WRAP_LENGTH then
-		for _, value in ipairs(removed_parts) do
-			removed_parts[value] = true
-			wrap_length = value == "arrow" and wrap_length + arrow_length or wrap_length + ui_opts[value]
-
-			if wrap_length >= MIN_WRAP_LENGTH then
-				break
-			end
-		end
-	end
-
-	return is_under_min_length, offset, wrap_length, removed_parts
+	return should_display_below, offset, wrap_length, removed_parts
 end
 
 --- Generates virtual texts and virtual lines for a diagnostic message.
