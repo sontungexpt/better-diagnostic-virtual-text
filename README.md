@@ -270,6 +270,8 @@ For the tree highlights, use:
 
 ## Public API Functions
 
+**Replace `M` with the `require("better-diagnostic-virtual-text.api")`.**
+
 NOTE : I was too lazy to write the complete API documentation, so I used ChatGPT to generate it. If there are any inaccuracies, please refer to the source for verification.
 
 ### `M.inspect_cache()`
@@ -278,7 +280,7 @@ NOTE : I was too lazy to write the complete API documentation, so I used ChatGPT
 - **Parameters**: None
 - **Returns**: None
 
-### `M.foreach_diagnostics_line(bufnr, callback)`
+### `M.foreach_line(bufnr, callback)`
 
 Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line. Ensures compatibility with Lua versions older than 5.2 by using the default `pairs` function directly, or with a custom `pairs` function that handles diagnostic metadata.
 
@@ -328,7 +330,8 @@ Clears the diagnostics extmarks for a buffer.
   - `line` (`integer`): The line number.
   - `recompute` (`boolean|nil`): Whether to recompute the diagnostics.
   - `comparator` (`function|nil`): The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
-  - `finish_soon` (`boolean|function|nil`): If true, stops processing when a severity 1 diagnostic is found under the cursor. If `finish_soon` is a function, it stops processing when `finish_soon()` returns true. When it stops immediately, it returns a list with only the found diagnostic. This parameter works only if `comparator` is provided or `recompute` is false.
+  - `finish_soon` (`boolean|function|nil`): If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found. When stop immediately the return value is the list with only found diagnostic. This parameter only work if `comparator` is provided or `recompute`` = false
+    .
 - **Returns**:
 
   - `table`: List of diagnostics sorted by severity.
@@ -345,7 +348,7 @@ Clears the diagnostics extmarks for a buffer.
   - `current_col` (`integer`): Optional. The current column number. Defaults to cursor column.
   - `recompute` (`boolean`): Optional. Whether to recompute diagnostics or use cached diagnostics. Defaults to false.
   - `comparator` (`function|nil`): The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
-  - `finish_soon` (`boolean|function|nil`): If true, stops processing when a severity 1 diagnostic is found under the cursor. If `finish_soon` is a function, it stops processing when `finish_soon()` returns true. When it stops immediately, it returns a list with only the found diagnostic. This parameter works only if `comparator` is provided or `recompute` is false.
+  - `finish_soon` (`boolean|function|nil`): If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found under cursor. When stop immediately the return value is the list with only found diagnostic. This parameter only work if `comparator` is provided or `recompute`` = false
 - **Returns**:
 
   - `table`: Diagnostics at the cursor position sorted by severity.

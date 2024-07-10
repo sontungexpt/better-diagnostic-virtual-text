@@ -337,7 +337,7 @@ end
 ---
 --- @param bufnr integer The buffer number for which to iterate through diagnostics.
 --- @param callback function The callback function to call for each line of diagnostics, with parameters `(line, diagnostics)`.
-function M.foreach_diagnostics_line(bufnr, callback)
+function M.foreach_line(bufnr, callback)
 	diagnostics_cache.foreach_line(bufnr, callback)
 end
 
@@ -504,10 +504,12 @@ end
 --- @param line  integer The line number
 --- @param recompute  boolean|nil Whether the diagnostics are recompute
 --- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
---- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon() return true or severity 1 diagnostic is found under the cursor if finish_soon is not a function. When stop immediately the return value is the list with only found diagnostic. This parmater just work if comparator is provided or recompute = false
+--- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided or recompute = false
 --- @return table The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
 function M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)
+	local has_cb_finish_soon = type(finish_soon) == "function"
+
 	if recompute then
 		local diagnostics = diag.get(bufnr, { lnum = line - 1 })
 		diagnostics_cache[bufnr][line] = diagnostics
@@ -518,7 +520,8 @@ function M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)
 		local sorted_diagnostics = {}
 		for i = 1, diagnostics_size do
 			local d = diagnostics[i]
-			if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
+			---@diagnostic disable-next-line: need-check-nil
+			if has_cb_finish_soon and finish_soon(d) or (finish_soon and d.severity == 1) then
 				return { d }, 1
 			end
 			sorted_diagnostics = insert_sorted(sorted_diagnostics, d, comparator, i - 1)
@@ -532,7 +535,8 @@ function M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)
 		local diagnostics = {}
 		if type(comparator) ~= "function" then
 			for i, d in meta_ipairs(dc) do
-				if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
+				---@diagnostic disable-next-line: need-check-nil
+				if (has_cb_finish_soon and finish_soon(d)) or (finish_soon and d.severity == 1) then
 					return { d }, 1
 				end
 				diagnostics[i] = d
@@ -541,7 +545,8 @@ function M.fetch_diagnostics(bufnr, line, recompute, comparator, finish_soon)
 		else
 			local diagnostics_size = 0
 			for _, d in meta_pairs(dc) do
-				if type(finish_soon) == "function" and finish_soon() or (finish_soon and d.severity == 1) then
+				---@diagnostic disable-next-line: need-check-nil
+				if (has_cb_finish_soon and finish_soon(d)) or (finish_soon and d.severity == 1) then
 					return { d }, 1
 				end
 				diagnostics, diagnostics_size = insert_sorted(diagnostics, d, comparator, diagnostics_size)
@@ -560,7 +565,7 @@ end
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
 --- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
 --- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
---- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon() return true or severity 1 diagnostic is found under the cursor if finish_soon is not a function. When stop immediately the return value is the list with only found diagnostic. This parmater just work if comparator is provided
+--- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found under the cursor. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided
 --- @return table A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
 --- @return table The full list of diagnostics for the line sorted by severity.
@@ -577,8 +582,10 @@ function M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute,
 	local cursor_diagnostics = {}
 	local cursor_diagnostics_size = 0
 	for _, d in ipairs(diagnostics) do
+		local has_cb_finish_soon = type(finish_soon) == "function"
 		if current_col >= d.col and current_col < d.end_col then
-			if finish_soon and (type(finish_soon) == "function" and finish_soon() or d.severity == 1) then
+			---@diagnostic disable-next-line: need-check-nil
+			if (has_cb_finish_soon and finish_soon(d)) or (finish_soon and d.severity == 1) then
 				return { d }, 1, diagnostics, diagnostics_size
 			end
 			cursor_diagnostics_size = cursor_diagnostics_size + 1
@@ -669,7 +676,7 @@ function M.format_line_chunks(
 	local message_highlight = hls()
 
 	if should_display_below then
-		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
+		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):match("^%s*(.*)")
 		local space_offset = space(virt_text_offset)
 		if first_line then
 			if not removed_parts.arrow then
