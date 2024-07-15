@@ -49,18 +49,16 @@ Add the following to your `init.lua` or `init.vim`:
 }
 
 -- or better ways configure in on_attach of lsp client
+-- if use this way don't need to call setup function
+{
+    'sontungexpt/better-diagnostic-virtual-text',
+    lazy = true,
+}
 M.on_attach = function(client, bufnr)
     -- nil can replace with the options of each buffer
-	require("better-diagnostic-virtual-text.api").setup_buf(bufnr, nil)
+	require("better-diagnostic-virtual-text.api").setup_buf(bufnr, {})
 
     --- ... other config for lsp client
-	lsp.handlers["textDocument/signatureHelp"] = lsp.with(lsp.handlers.signature_help, {
-		border = "single",
-		focusable = false,
-		relative = "cursor",
-	})
-
-	lsp.handlers["textDocument/hover"] = lsp.with(lsp.handlers.hover, { border = "single" })
 end
 ```
 
@@ -299,7 +297,7 @@ end
 usage:
 
 ```lua
-require("better-diagnostic-virtual-text").foreach_diagnostics_line(bufnr, function(line, diagnostics)
+require("better-diagnostic-virtual-text.api").foreach_line(bufnr, function(line, diagnostics)
   for _, diagnostic in meta_pairs(diagnostics) do
     print(diagnostic.message)
   end
