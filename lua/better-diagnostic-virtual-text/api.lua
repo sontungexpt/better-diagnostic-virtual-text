@@ -480,21 +480,21 @@ local space = function(num)
 			{ "  ", "    ", "      ", "        ", "          ", "            ", "              ", "                " }
 		for i = 16, 4, -2 do
 			if num % i == 0 then
-				return string.rep(pre_computes[i], num / i / 2)
+				return string.rep(pre_computes[i / 2], num / i)
 			end
 		end
 		return string.rep(pre_computes[1], num / 2)
-	else
-		-- 1, 3, 5, 7, 9, 11, 13, 15
-		local pre_computes =
-			{ " ", "   ", "     ", "       ", "         ", "           ", "             ", "               " }
-		for i = 15, 3, -2 do
-			if num % i == 0 then
-				return string.rep(pre_computes[i], (num / i - 1) / 2)
-			end
-		end
-		return string.rep(pre_computes[1], num)
 	end
+
+	-- 1, 3, 5, 7, 9, 11, 13, 15
+	local pre_computes =
+		{ " ", "   ", "     ", "       ", "         ", "           ", "             ", "               " }
+	for i = 15, 3, -2 do
+		if num % i == 0 then
+			return string.rep(pre_computes[(i + 1) / 2], num / i)
+		end
+	end
+	return string.rep(pre_computes[1], num)
 end
 
 --- Retrieves diagnostics at the line position in the specified buffer.
