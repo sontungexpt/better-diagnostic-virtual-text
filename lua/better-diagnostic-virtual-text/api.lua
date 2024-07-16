@@ -1224,14 +1224,13 @@ function M.setup_buf(bufnr, opts)
 	})
 
 	-- Attach to the buffer to rerender diagnostics virtual text when the window is resized.
-	autocmd("WinResized", {
+	autocmd("VimResized", {
 		buffer = bufnr,
 		group = autocmd_group,
 		callback = function()
 			if buffers_disabled[bufnr] then
 				return
 			end
-
 			extmark_cache[bufnr] = nil -- clear cache to recompute the virtual text
 			if opts.inline then
 				if prev_cursor_diagnostic then
