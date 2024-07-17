@@ -631,7 +631,6 @@ end
 ---     - left_kept_space: The space to keep on the left side.
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
----     - above: Whether to display the virtual text above the line.
 --- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
 --- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
@@ -639,6 +638,7 @@ end
 --- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
 --- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
+--- @param above_instead boolean - Display above or below
 --- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
 --- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
 --- @return table - A list of formatted chunks for virtual text display.
@@ -652,12 +652,12 @@ function M.format_line_chunks(
 	lasted_line,
 	virt_text_offset,
 	should_display_below,
+	above_instead,
 	removed_parts,
 	diagnostic
 )
 	local chunks = {}
 	local first_line = line_idx == 1
-	local above_instead = ui_opts.above
 	local severity_suffix = SEVERITY_SUFFIXS[severity]
 
 	local function hls(extend_hl_groups)
@@ -829,6 +829,7 @@ end
 --- @return table The list of virtual texts.
 --- @return table The list of virtual lines.
 --- @return number The offset of the virtual text.
+--- @return boolean Show extmark above or below
 local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 	local ui = opts.ui
 	local should_display_below, offset, wrap_length, removed_parts, msgs, size
@@ -841,12 +842,14 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 		should_display_below, offset, wrap_length, removed_parts, msgs, size =
 			cache[1], cache[2], cache[3], cache[4], cache[5], cache[6]
 	end
+
+	local above_instead = diagnostic.lnum > 0 and ui.above -- force below if on top of buffer
+
 	if size == 0 then
-		return {}, {}, offset
+		return {}, {}, offset, above_instead
 	end
 
 	local severity = diagnostic.severity
-	local above_instead = ui.above
 
 	local virt_lines = {}
 
@@ -861,12 +864,13 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 		size == 1,
 		offset,
 		should_display_below,
+		above_instead,
 		removed_parts,
 		diagnostic
 	)
 	if should_display_below then
 		if size == 1 then
-			return {}, { virt_text }, offset
+			return {}, { virt_text }, offset, above_instead
 		end
 		virt_lines[initial_idx] = virt_text
 		virt_text = {}
@@ -885,6 +889,7 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 					i == 1,
 					offset,
 					should_display_below,
+					above_instead,
 					removed_parts,
 					diagnostic
 				)
@@ -903,6 +908,7 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 					i == size,
 					offset,
 					should_display_below,
+					above_instead,
 					removed_parts,
 					diagnostic
 				)
@@ -910,7 +916,7 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 		end
 	end
 
-	return virt_text, virt_lines, offset
+	return virt_text, virt_lines, offset, above_instead
 end
 
 --- Checks if diagnostics exist for a buffer at a line.
@@ -979,7 +985,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 		M.clean_diagnostics(bufnr, clean_opts)
 	end
 	opts = opts or default_options
-	local virt_text, virt_lines, offset = generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
+	local virt_text, virt_lines, offset, above_instead = generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 	local virtline = diagnostic.lnum
 	local max_buf_line = api.nvim_buf_line_count(bufnr)
 	if virtline + 1 > max_buf_line then
@@ -992,8 +998,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 		virt_text_win_col = offset,
 		virt_text_pos = "overlay",
 		virt_lines = virt_lines,
-		virt_lines_above = opts.ui.above,
-		invalidate = virtline + 1 > max_buf_line,
+		virt_lines_above = above_instead,
 		priority = 2003,
 		line_hl_group = "CursorLine",
 	})
@@ -1158,7 +1163,9 @@ function M.setup_buf(bufnr, opts)
 			vim.defer_fn(function()
 				scheduled_update = false
 
-				diagnostics_cache.update(bufnr, new_diagnostics)
+				if new_diagnostics then
+					diagnostics_cache.update(bufnr, new_diagnostics)
+				end
 
 				if buffers_disabled[bufnr] then
 					-- still need to update the cache for the buffer

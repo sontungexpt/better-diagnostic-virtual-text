@@ -96,7 +96,6 @@ UI will has 4 parts: arrow, left_kept_space, message, right_kept_space orders:
 Override this function before setup the plugin.
 
 ```lua
-
 --- Format line chunks for virtual text display.
 ---
 --- This function formats the line chunks for virtual text display, considering various options such as severity,
@@ -105,10 +104,10 @@ Override this function before setup the plugin.
 --- @param ui_opts table - The table of UI options. Should contain:
 ---     - arrow: The symbol used as the left arrow.
 ---     - up_arrow: The symbol used as the up arrow.
+---     - down_arrow: The symbol used as the down arrow.
 ---     - left_kept_space: The space to keep on the left side.
 ---     - right_kept_space: The space to keep on the right side.
 ---     - wrap_line_after: The maximum line length to wrap after.
----     - above: Whether to display the virtual text above the line.
 --- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
 --- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
@@ -116,28 +115,26 @@ Override this function before setup the plugin.
 --- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
 --- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
+--- @param above_instead boolean - Display above or below
 --- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
 --- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
 --- @return table - A list of formatted chunks for virtual text display.
 --- @see vim.api.nvim_buf_set_extmark
-require("better-diagnostic-virtual-text.api").format_line_chunks = function(
-    ui_opts,
-    line_idx,
-    line_msg,
-    severity,
-    max_line_length,
-    lasted_line,
-    virt_text_offset,
-    should_under_line,
-    removed_parts,
-    diagnostic
+function M.format_line_chunks(
+	ui_opts,
+	line_idx,
+	line_msg,
+	severity,
+	max_line_length,
+	lasted_line,
+	virt_text_offset,
+	should_display_below,
+	above_instead,
+	removed_parts,
+	diagnostic
 )
-    -- replace with your logic to get chunks for each line
-
-    -- default logic
 	local chunks = {}
 	local first_line = line_idx == 1
-	local above_instead = ui_opts.above
 	local severity_suffix = SEVERITY_SUFFIXS[severity]
 
 	local function hls(extend_hl_groups)
@@ -155,8 +152,8 @@ require("better-diagnostic-virtual-text.api").format_line_chunks = function(
 
 	local message_highlight = hls()
 
-	if should_under_line then
-		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):gsub("^%s*", "")
+	if should_display_below then
+		local arrow_symbol = (above_instead and ui_opts.down_arrow or ui_opts.up_arrow):match("^%s*(.*)")
 		local space_offset = space(virt_text_offset)
 		if first_line then
 			if not removed_parts.arrow then
@@ -205,7 +202,10 @@ require("better-diagnostic-virtual-text.api").format_line_chunks = function(
 		})
 	end
 
-	tbl_insert(chunks, { line_msg, message_highlight })
+	tbl_insert(chunks, {
+		line_msg,
+		message_highlight,
+	})
 
 	if not removed_parts.right_kept_space then
 		local last_space = space(max_line_length - strdisplaywidth(line_msg) + ui_opts.right_kept_space)
