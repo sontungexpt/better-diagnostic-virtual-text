@@ -39,6 +39,7 @@ local default_options = {
 		down_arrow = "  ",
 		above = false,
 	},
+	priority = 2003,
 	inline = true,
 }
 
@@ -998,7 +999,7 @@ function M.show_diagnostic(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 		virt_text_pos = "overlay",
 		virt_lines = virt_lines,
 		virt_lines_above = above_instead,
-		priority = 2003,
+		priority = opts.priority,
 		line_hl_group = "CursorLine",
 	})
 	return shown_line, diagnostic
