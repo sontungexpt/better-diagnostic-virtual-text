@@ -843,22 +843,13 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 			cache[1], cache[2], cache[3], cache[4], cache[5], cache[6]
 	end
 
-	local above_instead = diagnostic.lnum > 0 and ui.above -- force below if on top of buffer
-
-	if size == 0 then
-		return {}, {}, offset, above_instead
-	end
-
 	local severity = diagnostic.severity
-
-	local virt_lines = {}
-
-	local initial_idx = above_instead and size or 1
+	local above_instead = diagnostic.lnum > 0 and ui.above -- force below if on top of buffer
 
 	local virt_text = M.format_line_chunks(
 		ui,
 		1,
-		msgs[initial_idx],
+		msgs[above_instead and size or 1],
 		severity,
 		wrap_length,
 		size == 1,
@@ -868,34 +859,42 @@ local function generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 		removed_parts,
 		diagnostic
 	)
-	if should_display_below then
-		if size == 1 then
+
+	if size == 1 then
+		if should_display_below then
 			return {}, { virt_text }, offset, above_instead
+		else
+			return virt_text, {}, offset, above_instead
 		end
-		virt_lines[initial_idx] = virt_text
-		virt_text = {}
 	end
+
+	local virt_lines = {}
 
 	if above_instead then
 		for i = 1, size - 1 do -- -1 for virt_text
-			tbl_insert(
-				virt_lines,
-				M.format_line_chunks(
-					ui,
-					size - i + 1,
-					msgs[i],
-					severity,
-					wrap_length,
-					i == 1,
-					offset,
-					should_display_below,
-					above_instead,
-					removed_parts,
-					diagnostic
-				)
+			virt_lines[i] = M.format_line_chunks(
+				ui,
+				size - i + 1,
+				msgs[i],
+				severity,
+				wrap_length,
+				i == 1,
+				offset,
+				should_display_below,
+				above_instead,
+				removed_parts,
+				diagnostic
 			)
 		end
+		if should_display_below then
+			virt_lines[size] = virt_text
+			virt_text = {}
+		end
 	else
+		if should_display_below then
+			virt_lines[1] = virt_text
+			virt_text = {}
+		end
 		for i = 2, size do -- start from 2 for virt_text
 			tbl_insert(
 				virt_lines,
