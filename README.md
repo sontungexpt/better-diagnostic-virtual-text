@@ -466,7 +466,7 @@ Shows the highest severity diagnostic at the cursor position in a buffer.
   - `diagnostics_list` (table): The list of diagnostics at the cursor position.
   - `size` (integer): The size of the diagnostics list.
 
-### `M.get_line_shown(diagnostic)`
+### `M.get_shown_line_num(diagnostic)`
 
 Returns the line number where the diagnostic was shown.
 

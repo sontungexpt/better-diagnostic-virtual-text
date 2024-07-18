@@ -497,6 +497,15 @@ local space = function(num)
 	return string.rep(pre_computes[1], num)
 end
 
+--- Compare the severity of two objects in ascending order.
+---
+--- @param d1 vim.Diagnostic The first object with a `severity` attribute.
+--- @param d2 vim.Diagnostic The second object with a `severity` attribute.
+--- @return boolean True if `d1.severity` is less than `d2.severity`, otherwise false.
+local compare_severity = function(d1, d2)
+	return d1.severity < d2.severity
+end
+
 --- Retrieves diagnostics at the line position in the specified buffer.
 --- Diagnostics are filtered and sorted by severity, with the most severe ones first.
 ---
@@ -606,16 +615,8 @@ end
 --- @return table The full list of diagnostics for the line.
 --- @return integer The number of diagnostics in the list.
 M.fetch_top_cursor_diagnostic = function(bufnr, current_line, current_col, recompute)
-	local cursor_diags, _, diags, diags_size = M.fetch_cursor_diagnostics(
-		bufnr,
-		current_line,
-		current_col,
-		recompute,
-		function(d1, d2)
-			return d1.severity < d2.severity
-		end,
-		true
-	)
+	local cursor_diags, _, diags, diags_size =
+		M.fetch_cursor_diagnostics(bufnr, current_line, current_col, recompute, compare_severity, true)
 	return cursor_diags[1], diags, diags_size
 end
 
@@ -1017,9 +1018,7 @@ end
 --- @return table The list of diagnostics at the line.
 --- @return integer The size of the diagnostics list.
 M.show_top_severity_diagnostic = function(opts, bufnr, current_line, recompute_diags, clean_opts, recompute_ui)
-	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags, function(d1, d2)
-		return d1.severity < d2.severity
-	end, true)
+	local diags, diags_size = M.fetch_diagnostics(bufnr, current_line, recompute_diags, compare_severity, true)
 	if not diags[1] then
 		if clean_opts then
 			M.clean_diagnostics(bufnr, clean_opts)
