@@ -1134,13 +1134,17 @@ M.setup_buf = function(bufnr, opts)
 
 	--- @param current_line integer The current line number.
 	--- @param current_col integer The current column number.
-	local show_diagnostics = function(current_line, current_col)
+	local show_diagnostics = function(current_line, current_col, recompute_ui)
 		clean_diagnostics(true)
+		local shown_lines = {}
 		for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
-			if line == current_line then
-				show_cursor_diagnostic(current_line, current_col)
-			else
-				show_top_severity_diagnostic(line)
+			if not shown_lines[line] then
+				shown_lines[line] = true
+				if line == current_line then
+					show_cursor_diagnostic(current_line, current_col, recompute_ui)
+				else
+					show_top_severity_diagnostic(line, recompute_ui)
+				end
 			end
 		end
 	end
