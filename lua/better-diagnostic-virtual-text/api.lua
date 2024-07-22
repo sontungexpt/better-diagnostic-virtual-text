@@ -476,14 +476,14 @@ local space = function(num)
 
 	if num % 2 == 0 then
 		-- 2, 4, 6, 8, 10, 12, 14, 16
-		local pre_computes =
+		local presets =
 			{ "  ", "    ", "      ", "        ", "          ", "            ", "              ", "                " }
 		for i = 16, 4, -2 do
 			if num % i == 0 then
-				return string.rep(pre_computes[i / 2], num / i)
+				return string.rep(presets[i / 2], num / i)
 			end
 		end
-		return string.rep(pre_computes[1], num / 2)
+		return string.rep(presets[1], num / 2)
 	end
 
 	-- 1, 3, 5, 7, 9, 11, 13, 15
@@ -1060,8 +1060,9 @@ M.get_shown_line_num = function(diagnostic)
 	return diagnostic.lnum + 1
 end
 
---- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
+--- Sets up diagnostic virtual text for a buffer.
 --- @param bufnr integer The buffer number.
+--- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
 M.setup_buf = function(bufnr, opts)
 	if buffers_attached[bufnr] then
 		return
@@ -1149,6 +1150,13 @@ M.setup_buf = function(bufnr, opts)
 		end
 	end
 
+	local function when_enabled(cb)
+		if buffers_disabled[bufnr] then
+			return
+		end
+		cb()
+	end
+
 	autocmd("DiagnosticChanged", {
 		group = autocmd_group,
 		buffer = bufnr,
@@ -1164,24 +1172,20 @@ M.setup_buf = function(bufnr, opts)
 			-- delay the update to prevent multiple updates in a short time
 			vim.defer_fn(function()
 				scheduled_update = false
-
 				diagnostics_cache.update(bufnr, new_diagnostics)
 
-				if buffers_disabled[bufnr] then
-					-- still need to update the cache for the buffer
-					return
-				end
+				when_enabled(function()
+					local current_line, current_col = get_cursor(0)
 
-				local current_line, current_col = get_cursor(0)
+					if opts.inline then
+						show_cursor_diagnostic(current_line, current_col)
+					else
+						show_diagnostics(current_line, current_col)
+					end
 
-				if opts.inline then
-					show_cursor_diagnostic(current_line, current_col)
-				else
-					show_diagnostics(current_line, current_col)
-				end
-
-				-- multiple_lines_changed = false
-				text_changing = false
+					-- multiple_lines_changed = false
+					text_changing = false
+				end)
 			end, 300)
 		end,
 	})
@@ -1190,42 +1194,43 @@ M.setup_buf = function(bufnr, opts)
 		group = autocmd_group,
 		buffer = bufnr,
 		callback = function()
-			if buffers_disabled[bufnr] then
-				return
-			end
+			when_enabled(function()
+				if text_changing then -- we had another event for text changing
+					text_changing = false
+					return
+				end
 
-			if text_changing then -- we had another event for text changing
-				text_changing = false
-				return
-			end
-
-			--- just moving cursor, no need to re calculate diagnostics virtual text position so we can use cache
-			local current_line, current_col = get_cursor(0)
-			if exists_any_diagnostics(current_line) then
-				if current_line == prev_line and prev_cursor_diagnostic then
-					if prev_cursor_diagnostic.col > current_col or prev_cursor_diagnostic.end_col - 1 < current_col then
+				--- just moving cursor, no need to re calculate diagnostics virtual text position so we can use cache
+				local current_line, current_col = get_cursor(0)
+				if exists_any_diagnostics(current_line) then
+					if current_line == prev_line and prev_cursor_diagnostic then
+						if
+							prev_cursor_diagnostic.col > current_col
+							or prev_cursor_diagnostic.end_col - 1 < current_col
+						then
+							show_cursor_diagnostic(current_line, current_col)
+						end
+					elseif opts.inline then
 						show_cursor_diagnostic(current_line, current_col)
+					else -- opts.inline is false
+						prev_cursor_diagnostic = nil -- remove previous cursor diagnostic cache to make sure this diagnostic is shown
+						show_cursor_diagnostic(current_line, current_col)
+						if exists_any_diagnostics(prev_line) then
+							show_top_severity_diagnostic(prev_line) -- change last line diagnostic to top severity diagnostic
+						end
 					end
 				elseif opts.inline then
-					show_cursor_diagnostic(current_line, current_col)
-				else -- opts.inline is false
-					prev_cursor_diagnostic = nil -- remove previous cursor diagnostic cache to make sure this diagnostic is shown
-					show_cursor_diagnostic(current_line, current_col)
+					clean_diagnostics(prev_cursor_diagnostic)
+					prev_cursor_diagnostic = nil
+				elseif current_line ~= prev_line then -- opts.inline is false
 					if exists_any_diagnostics(prev_line) then
-						show_top_severity_diagnostic(prev_line) -- change last line diagnostic to top severity diagnostic
+						show_top_severity_diagnostic(prev_line)
 					end
 				end
-			elseif opts.inline then
-				clean_diagnostics(prev_cursor_diagnostic)
-				prev_cursor_diagnostic = nil
-			elseif current_line ~= prev_line then -- opts.inline is false
-				if exists_any_diagnostics(prev_line) then
-					show_top_severity_diagnostic(prev_line)
-				end
-			end
 
-			prev_line = current_line
-			-- multiple_lines_changed = false
+				prev_line = current_line
+				-- multiple_lines_changed = false
+			end)
 		end,
 	})
 
@@ -1234,18 +1239,17 @@ M.setup_buf = function(bufnr, opts)
 		buffer = bufnr,
 		group = autocmd_group,
 		callback = function()
-			if buffers_disabled[bufnr] then
-				return
-			end
-			extmark_cache[bufnr] = nil -- clear cache to recompute the virtual text
-			if opts.inline then
-				if prev_cursor_diagnostic then
-					show_diagnostic(prev_cursor_diagnostic)
+			when_enabled(function()
+				extmark_cache[bufnr] = nil -- clear cache to recompute the virtual text
+				if opts.inline then
+					if prev_cursor_diagnostic then
+						show_diagnostic(prev_cursor_diagnostic)
+					end
+				else
+					local current_line, current_col = get_cursor(0)
+					show_diagnostics(current_line, current_col)
 				end
-			else
-				local current_line, current_col = get_cursor(0)
-				show_diagnostics(current_line, current_col)
-			end
+			end)
 		end,
 	})
 
@@ -1265,17 +1269,16 @@ M.setup_buf = function(bufnr, opts)
 			---@diagnostic disable-next-line: unused-local
 			prev_byte_count
 		)
-			if buffers_disabled[bufnr] then
-				return
-			end
-			text_changing = true
-			if last_line_changed ~= last_line_updated_range then -- added or removed line
-				-- multiple_lines_changed = true
-				local current_line, current_col = get_cursor(0)
-				show_cursor_diagnostic(current_line, current_col, true)
-			elseif prev_cursor_diagnostic then
-				show_diagnostic(prev_cursor_diagnostic, true)
-			end
+			when_enabled(function()
+				text_changing = true
+				if last_line_changed ~= last_line_updated_range then -- added or removed line
+					-- multiple_lines_changed = true
+					local current_line, current_col = get_cursor(0)
+					show_cursor_diagnostic(current_line, current_col, true)
+				elseif prev_cursor_diagnostic then
+					show_diagnostic(prev_cursor_diagnostic, true)
+				end
+			end)
 		end,
 	})
 
