@@ -1066,7 +1066,12 @@ end
 M.setup_buf = function(bufnr, opts)
 	if buffers_attached[bufnr] then
 		return
+	elseif not diag.is_enabled({
+		bufnr = bufnr,
+	}) then -- check if the buffer is disabled before attaching
+		buffers_disabled[bufnr] = true
 	end
+
 	buffers_attached[bufnr] = true
 
 	local autocmd_group = api.nvim_create_augroup(make_group_name(bufnr), { clear = true })
