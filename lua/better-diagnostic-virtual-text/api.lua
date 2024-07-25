@@ -994,6 +994,7 @@ M.show_diagnostic = function(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 	local shown_line = api.nvim_buf_set_extmark(bufnr, ns, virtline, 0, {
 		id = virtline + 1,
 		virt_text = virt_text,
+		hl_eol = true,
 		virt_text_win_col = offset,
 		virt_text_pos = "overlay",
 		virt_lines = virt_lines,
@@ -1239,7 +1240,7 @@ M.setup_buf = function(bufnr, opts)
 	})
 
 	-- Attach to the buffer to rerender diagnostics virtual text when the window is resized.
-	autocmd("WinResized", {
+	autocmd({ "WinScrolled", "WinLeave" }, {
 		buffer = bufnr,
 		group = autocmd_group,
 		callback = function()
