@@ -77,7 +77,7 @@ do
 			if metatable and metatable.__pairs then
 				return metatable.__pairs(t)
 			end
-			return pairs(t)
+			return raw_pairs(t)
 		end
 		for lnum, diagnostics in pairs(buf_diagnostics.raw()) do
 			callback(lnum, diagnostics)
@@ -1045,21 +1045,24 @@ M.setup_buf = function(bufnr, opts)
 			scheduled_update = true
 			-- delay the update to prevent multiple updates in a short time
 			vim.defer_fn(function()
-				scheduled_update = false
-				diagnostics_cache.update(bufnr, new_diagnostics)
+				-- If an buffer is closed before the update is executed then buffer will be invalid
+				if api.nvim_buf_is_valid(bufnr) then
+					scheduled_update = false
+					diagnostics_cache.update(bufnr, new_diagnostics)
 
-				when_enabled(function()
-					local current_line, current_col = get_cursor(0)
+					when_enabled(function()
+						local current_line, current_col = get_cursor(0)
 
-					if opts.inline then
-						show_cursor_diagnostic(current_line, current_col)
-					else
-						show_diagnostics(current_line, current_col)
-					end
+						if opts.inline then
+							show_cursor_diagnostic(current_line, current_col)
+						else
+							show_diagnostics(current_line, current_col)
+						end
 
-					-- multiple_lines_changed = false
-					text_changing = false
-				end)
+						-- multiple_lines_changed = false
+						text_changing = false
+					end)
+				end
 			end, 300)
 		end,
 	})
