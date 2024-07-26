@@ -477,6 +477,15 @@ Returns the line number where the diagnostic was shown.
 - **Returns:**
   - `line_shown` (integer): The line number where the diagnostic was shown.
 
+### `M.when_enabled(bufnr, callback)`
+
+Invokes a callback function when the plugin is enabled for a buffer.
+
+- **Parameters:**
+
+  - `bufnr` (integer): The buffer number.
+  - `callback` (function): The callback function to invoke.
+
 ### `M.setup_buf(bufnr, opts)`
 
 Sets up the buffer to handle diagnostic rendering and interaction.

@@ -2,25 +2,10 @@ local vim, type, ipairs = vim, type, ipairs
 local api, fn, diag = vim.api, vim.fn, vim.diagnostic
 local autocmd, strdisplaywidth, tbl_insert = api.nvim_create_autocmd, fn.strdisplaywidth, table.insert
 local ns = api.nvim_create_namespace("better-diagnostic-virtual-text")
+local config = require("better-diagnostic-virtual-text.config")
 
 local SEVERITY_SUFFIXS = { "Error", "Warn", "Info", "Hint" }
 local TAB_LENGTH = strdisplaywidth("\t")
-
-local meta_pairs = function(t)
-	local metatable = getmetatable(t)
-	if metatable and metatable.__pairs then
-		return metatable.__pairs(t)
-	end
-	return pairs(t)
-end
-
-local meta_ipairs = function(t)
-	local metatable = getmetatable(t)
-	if metatable and metatable.__ipairs then
-		return metatable.__ipairs(t)
-	end
-	return ipairs(t)
-end
 
 local make_group_name = function(bufnr)
 	return "BetterDiagnosticVirtualText" .. bufnr
@@ -28,34 +13,32 @@ end
 
 local M = {}
 
-local default_options = {
-	ui = {
-		-- number or false
-		wrap_line_after = false, -- Wrap the line after this length to avoid the virtual text is too long
-		left_kept_space = 3, --- The number of spaces kept on the left side of the virtual text, make sure it enough to custom for each line
-		right_kept_space = 2, --- The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
-		arrow = "  ",
-		up_arrow = "  ",
-		down_arrow = "  ",
-		above = false,
-	},
-	priority = 2003,
-	inline = true,
-}
-
+--- @type table<integer, boolean> Buffers that are attached.
 local buffers_attached = {}
+
+--- @type table<integer, boolean> Buffers that are disabled.
 local buffers_disabled = {}
 
--- extmark_cache: bufnr -> key: diagnostic table, value: { should_display_below, offset, wrap_length, removed_parts, msgs, size }
+--- @type table<integer, table<table, table>> Extmark cache for diagnostics.
+--- Key: buffer number
+--- Value: table with diagnostic table as key, and another table as value containing:
+---  - should_display_below: boolean
+---  - offset: integer
+---  - wrap_length: integer
+---  - removed_parts: ExtmarkRemovedPart
+---  - msgs: table
+---  - size: integer
 local extmark_cache = setmetatable({}, {
 	__index = function(t, bufnr)
 		t[bufnr] = {}
 		return t[bufnr]
 	end,
 })
+
 local diagnostics_cache = {}
+
 do
-	--- @type table<integer, table>
+	---@type table<integer, BufferDiagnostic> Real diagnostics cache.
 	--- ex:
 	--- {
 	---   [`1`] = {
@@ -70,27 +53,34 @@ do
 	--- }
 	local real_diagnostics_cache = {}
 
-	--- This function is used to inspect the diagnostics cache for debug
+	--- Inspects the diagnostics cache for debugging purposes.
+	--- @return table A clone of the diagnostics cache.
 	function diagnostics_cache.inspect()
 		local clone_table = {}
 		for bufnr, diagnostics in pairs(real_diagnostics_cache) do
-			clone_table[bufnr] = diagnostics.real()
+			clone_table[bufnr] = diagnostics.raw()
 		end
 		return clone_table
 	end
 
 	--- Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line.
 	--- @param bufnr integer The buffer number for which to iterate through diagnostics.
-	--- @param callback function The callback function to call for each line of diagnostics, with parameters `(line, diagnostics)`.
+	--- @param callback fun(lnum: integer, diagnostics: table<vim.Diagnostic, vim.Diagnostic>)
 	function diagnostics_cache.foreach_line(bufnr, callback)
 		local buf_diagnostics = real_diagnostics_cache[bufnr]
 		if not buf_diagnostics then
 			return
 		end
 		local raw_pairs = pairs
-		pairs = meta_pairs
-		for line, diagnostics in meta_pairs(buf_diagnostics.real()) do
-			callback(line, diagnostics)
+		pairs = function(t)
+			local metatable = getmetatable(t)
+			if metatable and metatable.__pairs then
+				return metatable.__pairs(t)
+			end
+			return pairs(t)
+		end
+		for lnum, diagnostics in pairs(buf_diagnostics.raw()) do
+			callback(lnum, diagnostics)
 		end
 		pairs = raw_pairs
 	end
@@ -103,7 +93,7 @@ do
 
 	--- Update the diagnostics cache for a buffer.
 	--- @param bufnr integer The buffer number.
-	--- @param diagnostics ? table The list of diagnostics to update. If not provided it will get all diagnostics of current bufnr
+	--- @param diagnostics ? vim.Diagnostic[] The list of diagnostics to update. If not provided it will get all diagnostics of current bufnr
 	function diagnostics_cache.update(bufnr, diagnostics)
 		extmark_cache[bufnr] = {}
 		real_diagnostics_cache[bufnr] = nil -- no need to call __newindex from the diagnostics_cache
@@ -116,7 +106,7 @@ do
 	--- Updates the diagnostics cache for the buffer at a line
 	--- @param bufnr integer The buffer number
 	--- @param line integer The line number
-	--- @param diagnostic table The new diagnostic to add to cache, or a list to update the line
+	--- @param diagnostic vim.Diagnostic The new diagnostic to add to cache, or a list to update the line
 	function diagnostics_cache.update_line(bufnr, line, diagnostic)
 		diagnostics_cache[bufnr][line] = diagnostic
 	end
@@ -133,129 +123,9 @@ do
 			if real_diagnostics_cache[bufnr] then
 				return real_diagnostics_cache[bufnr]
 			else
-				---@type table<integer, table<table|integer, vim.Diagnostic>>
-				--- ex:
-				--- {
-				---  [`1`] = {
-				---    [`0`] = 1, -- number of diagnostics in the line
-				---    [`vim.Diagnostic`] = vim.Diagnostic,
-				---    [`vim.Diagnostic`] = vim.Diagnostic,
-				---  }
-				---  [`2`] = {
-				---    [`0`] = 1, -- number of diagnostics in the line
-				---    [`vim.Diagnostic`] = vim.Diagnostic,
-				---    [`vim.Diagnostic`] = vim.Diagnostic,
-				---  }
-				--- }
-				---
-				local buffer = {}
-				local proxy_buffer = {
-					-- This function is used to inspect the diagnostics cache for debug
-					real = function()
-						return buffer
-					end,
-				}
-
-				real_diagnostics_cache[bufnr] = setmetatable(proxy_buffer, {
-					__pairs = function(_)
-						---@diagnostic disable: redundant-return-value
-						return pairs(buffer)
-					end,
-
-					__index = function(_, line)
-						return buffer[line]
-					end,
-
-					--- Tracks the existence of diagnostics for a buffer at a line.
-					--- @param line integer The lnum of the diagnostic being tracked in 1-based index. It's also the line where the diagnostic is located in the buffer
-					--- @param diagnostic table The diagnostic being tracked
-					__newindex = function(t, line, diagnostic)
-						if diagnostic == nil or not next(diagnostic) then
-							-- Untrack this line if `diagnostic` is nil or an empty table.
-							local line_diags = buffer[line]
-							if line_diags then
-								for _, d in meta_pairs(line_diags) do
-									local lnum, end_lnum = d.lnum + 1, d.end_lnum + 1
-									-- The line is the original line of the diagnostic so we need to remove all related lines
-									-- If not the diagnostic still exists and should not be removed
-									if line == lnum then
-										for i = lnum, end_lnum do
-											local line_i_diags = buffer[i]
-											if line_i_diags and line_i_diags[d] and line_i_diags[0] > 1 then
-												line_i_diags[d] = nil
-												line_i_diags[0] = line_i_diags[0] - 1
-											else
-												buffer[i] = nil
-											end
-										end
-									end
-								end
-							end
-						elseif type(diagnostic[1]) == "table" then
-							-- Replace the line with the new diagnostics
-							t[line] = nil -- call the __newindex in case nil
-							for _, d in ipairs(diagnostic) do
-								t[d.lnum + 1] = d -- call the __newindex in case track diagnostic
-							end
-						elseif diagnostic.end_lnum then
-							-- Ensure the diagnostic is not an empty table.
-							local end_lnum = diagnostic.end_lnum + 1 -- change to 1-based
-							for i = line, end_lnum do
-								local line_i_diags = buffer[i]
-								if not line_i_diags then
-									buffer[i] = setmetatable(
-										---@type table<table|integer, vim.Diagnostic>
-										---@key integer `0` The number of diagnostics in the line
-										---@key vim.Diagnostic The diagnostic
-										---@value vim.Diagnostic The diagnostic
-										---ex:
-										---{
-										---  [`0`] = 1, -- number of diagnostics in the line
-										---  [`vim.Diagnostic`] = vim.Diagnostic,
-										---  [`vim.Diagnostic`] = vim.Diagnostic,
-										---}
-										{
-											[0] = 1,
-											[diagnostic] = diagnostic,
-										},
-										{
-											__len = function(t1)
-												return t1[0]
-											end,
-											__pairs = function(t1)
-												return function(_, k, v)
-													k, v = next(t1, k)
-													if k == 0 then
-														return next(t1, k)
-													end
-													return k, v
-												end
-											end,
-											__ipairs = function(t1)
-												local k = nil
-												local idx = 0
-												return function(_, _, v)
-													k, v = next(t1, k)
-													if k == 0 then
-														k, v = next(t1, k)
-													end
-													if k then
-														idx = idx + 1
-														return idx, v
-													end
-												end
-											end,
-										}
-									)
-								elseif not line_i_diags[diagnostic] then
-									line_i_diags[diagnostic] = diagnostic
-									line_i_diags[0] = line_i_diags[0] + 1
-								end
-							end
-						end
-					end,
-				})
-				return proxy_buffer
+				local buffer = require("better-diagnostic-virtual-text.BufferCache").new()
+				real_diagnostics_cache[bufnr] = buffer
+				return buffer
 			end
 		end,
 	})
@@ -337,7 +207,7 @@ end
 --- The key `0` is used to store the number of diagnostics in the line.
 ---
 --- @param bufnr integer The buffer number for which to iterate through diagnostics.
---- @param callback function The callback function to call for each line of diagnostics, with parameters `(line, diagnostics)`.
+--- @param callback fun(lnum: integer, diagnostics: table<vim.Diagnostic, vim.Diagnostic>)
 M.foreach_line = function(bufnr, callback)
 	diagnostics_cache.foreach_line(bufnr, callback)
 end
@@ -345,7 +215,7 @@ end
 --- Updates the diagnostics cache
 --- @param bufnr integer The buffer number
 --- @param line integer The line number
---- @param diagnostic table The new diagnostic to track or list of diagnostics in a line to update
+--- @param diagnostic vim.Diagnostic The new diagnostic to track or list of diagnostics in a line to update
 M.update_diagnostics_cache = function(bufnr, line, diagnostic)
 	diagnostics_cache[bufnr][line] = diagnostic
 end
@@ -408,7 +278,7 @@ end
 --- @param str string The string to count the leading spaces in.
 --- @return number The number of leading spaces in the string.
 --- @return boolean Whether the string is all spaces.
-local count_initial_spaces = function(str)
+local count_indent_spaces = function(str)
 	local i = 1
 	local sum = 0
 	local byte = str:byte(i)
@@ -439,15 +309,13 @@ end
 -- 	return list
 -- end
 
----
 --- Inserts a value into a sorted list using a comparator function.
 --- The list remains sorted after the insertion.
----
 --- @param list table The sorted list to insert the value into.
 --- @param value any The value to insert into the list.
---- @param comparator function A function that takes two values and returns true if the first is less than the second.
+--- @param comparator fun(a: any, b: any): boolean The comparator function to sort the list.
 --- @param list_size integer|nil The current size of the list. If not provided, it is calculated.
---- @return table The list with the new value inserted and sorted.
+--- @return any[] The list with the new value inserted and sorted.
 --- @return integer The new size of the list.
 local function insert_sorted(list, value, comparator, list_size)
 	local new_size = (list_size or #list) + 1
@@ -462,9 +330,6 @@ local function insert_sorted(list, value, comparator, list_size)
 end
 
 --- Generates a string of spaces of the specified length.
---- This function optimizes the process of generating a string of spaces by
---- checking if the length is divisible by numbers from 10 to 2.
---- substrings to minimize the number of calls to `string.rep`.
 --- @param num number The total number of spaces to generate.
 --- @return string A string consisting of `num` spaces.
 local space = function(num)
@@ -510,10 +375,10 @@ end
 ---
 --- @param bufnr integer The buffer number
 --- @param line  integer The line number
---- @param recompute  boolean|nil Whether the diagnostics are recompute
---- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
---- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided or recompute = false
---- @return table The full list of diagnostics for the line sorted by severity
+--- @param recompute ? boolean Whether the diagnostics are recompute
+--- @param comparator ? fun(a: vim.Diagnostic, b: vim.Diagnostic): boolean The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+--- @param finish_soon ? boolean|fun(diagnostic: vim.Diagnostic) If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found under the cursor. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided
+--- @return vim.Diagnostic[] The full list of diagnostics for the line sorted by severity
 --- @return integer The number of diagnostics in the line
 M.fetch_diagnostics = function(bufnr, line, recompute, comparator, finish_soon)
 	local has_cb_finish_soon = type(finish_soon) == "function"
@@ -542,7 +407,7 @@ M.fetch_diagnostics = function(bufnr, line, recompute, comparator, finish_soon)
 		end
 		local diagnostics = {}
 		if type(comparator) ~= "function" then
-			for i, d in meta_ipairs(dc) do
+			for i, d in dc.ipairs() do
 				---@diagnostic disable-next-line: need-check-nil
 				if (has_cb_finish_soon and finish_soon(d)) or (finish_soon and d.severity == 1) then
 					return { d }, 1
@@ -552,7 +417,7 @@ M.fetch_diagnostics = function(bufnr, line, recompute, comparator, finish_soon)
 			return diagnostics, dc[0]
 		else
 			local diagnostics_size = 0
-			for _, d in meta_pairs(dc) do
+			for _, d in dc.pairs() do
 				---@diagnostic disable-next-line: need-check-nil
 				if (has_cb_finish_soon and finish_soon(d)) or (finish_soon and d.severity == 1) then
 					return { d }, 1
@@ -571,12 +436,12 @@ end
 --- @param bufnr integer The buffer number to get diagnostics for.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
---- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @param comparator ? function The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
---- @param finish_soon ? boolean|function If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found under the cursor. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided
---- @return table A table containing diagnostics at the cursor position sorted by severity.
+--- @param recompute ? boolean Whether the diagnostics are recompute
+--- @param comparator ? fun(a: vim.Diagnostic, b: vim.Diagnostic): boolean The comparator function to sort the diagnostics. If not provided, the diagnostics are not sorted.
+--- @param finish_soon ? boolean|fun(diagnostic: vim.Diagnostic) If true, stops processing sort when a finish_soon(d) return true or finish_soon is boolean and severity 1 diagnostic is found under the cursor. When stop immediately the return value is the list with only found diagnostic. This parmater only work if comparator is provided
+--- @return vim.Diagnostic[] A table containing diagnostics at the cursor position sorted by severity.
 --- @return integer The number of diagnostics at the cursor position in the line sorted by severity.
---- @return table The full list of diagnostics for the line sorted by severity.
+--- @return vim.Diagnostic[] The full list of diagnostics for the line sorted by severity.
 --- @return integer The number of diagnostics in the line sorted by severity.
 M.fetch_cursor_diagnostics = function(bufnr, current_line, current_col, recompute, comparator, finish_soon)
 	if type(current_line) ~= "number" then
@@ -610,8 +475,8 @@ end
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
 --- @param recompute ? boolean Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
---- @return table A table of diagnostics for the current position and the current line number.
---- @return table The full list of diagnostics for the line.
+--- @return vim.Diagnostic A table of diagnostics for the current position and the current line number.
+--- @return vim.Diagnostic[] The full list of diagnostics for the line.
 --- @return integer The number of diagnostics in the list.
 M.fetch_top_cursor_diagnostic = function(bufnr, current_line, current_col, recompute)
 	local cursor_diags, _, diags, diags_size =
@@ -624,24 +489,19 @@ end
 --- This function formats the line chunks for virtual text display, considering various options such as severity,
 --- underline symbol, text offsets, and parts to be removed.
 ---
---- @param ui_opts table - The table of UI options. Should contain:
----     - arrow: The symbol used as the left arrow.
----     - up_arrow: The symbol used as the up arrow.
----     - down_arrow: The symbol used as the down arrow.
----     - left_kept_space: The space to keep on the left side.
----     - right_kept_space: The space to keep on the right side.
----     - wrap_line_after: The maximum line length to wrap after.
+--- @param ui_opts UIConfig - The table of UI options.
 --- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
---- @param severity number - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
+--- @param severity vim.diagnostic.Severity - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
 --- @param max_line_length number - The maximum length of the line.
 --- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
 --- @param should_display_below boolean - Whether to display the virtual text below the line. If above is true, this option will be whether the virtual text should be above
 --- @param above_instead boolean - Display above or below
---- @param removed_parts table - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
---- @param diagnostic table - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
---- @return table - A list of formatted chunks for virtual text display.
+--- @param removed_parts ExtmarkRemovedPart - A table indicating which parts should be deleted and make room for message (e.g., arrow, left_kept_space, right_kept_space).
+--- @param diagnostic vim.Diagnostic - The diagnostic to display. see `:help vim.Diagnostic.` for more information.
+--- @return table<string,string[]> - A list of formatted chunks for virtual text display.
+--- @see UIConfig
 --- @see vim.api.nvim_buf_set_extmark
 M.format_line_chunks = function(
 	ui_opts,
@@ -654,6 +514,7 @@ M.format_line_chunks = function(
 	should_display_below,
 	above_instead,
 	removed_parts,
+	---@diagnostic disable-next-line: unused-local
 	diagnostic
 )
 	local chunks = {}
@@ -744,19 +605,13 @@ end
 --- and calculates the appropriate wrap length for virtual text. It also determines which parts
 --- of the text (e.g., arrows, spaces) should be removed to fit within the wrap length.
 ---
---- @param ui_opts table A table containing UI settings, including:
----     - arrow: The symbol used as the left arrow.
----     - up_arrow: The symbol used as the up arrow.
----     - down_arrow: The symbol used as the down arrow.
----     - left_kept_space: The space to keep on the left side.
----     - right_kept_space: The space to keep on the right side.
----     - wrap_line_after: The maximum line length to wrap after.
----     - above: Whether to display the virtual text above the line.
+--- @param ui_opts UIConfig A table containing UI settings
 --- @param line_num ? integer The line number to evaluate. If not provided, the current line is used.
 --- @return boolean Whether the virtual text should be displayed below the line.
 --- @return number The offset of the virtual text.
 --- @return number The calculated wrap length.
 --- @return table A table indicating which parts were removed to fit within the wrap length.
+--- @see UIConfig
 local evaluate_extmark = function(ui_opts, line_num)
 	local window_info = fn.getwininfo(api.nvim_get_current_win())[1] -- First entry
 	local text_area_width = window_info.width - window_info.textoff
@@ -780,8 +635,8 @@ local evaluate_extmark = function(ui_opts, line_num)
 	local free_space
 	local arrow_length
 	if should_display_below then
-		local init_spaces, only_space = count_initial_spaces(line_text)
-		offset = only_space and 0 or init_spaces
+		local indent_space, only_space = count_indent_spaces(line_text)
+		offset = only_space and 0 or indent_space
 		free_space = text_area_width
 		arrow_length = up_arrow_length
 	else
@@ -797,6 +652,7 @@ local evaluate_extmark = function(ui_opts, line_num)
 		wrap_length = math.min(wrap_line_after, wrap_length)
 	end
 
+	--- @type ExtmarkRemovedPart
 	local removed_parts = {
 		"right_kept_space",
 		"left_kept_space",
@@ -823,11 +679,11 @@ end
 --- This function creates virtual texts and lines for a given diagnostic message based on the provided options.
 --- It wraps the diagnostic message if necessary and formats the lines according to the severity and UI settings.
 ---
---- @param opts table A table of options, which includes the UI settings and signs to use for the virtual texts.
---- @param diagnostic table The diagnostic message to generate the virtual texts for.
+--- @param opts Config A table of options, which includes the UI settings and signs to use for the virtual texts.
+--- @param diagnostic vim.Diagnostic The diagnostic message to generate the virtual texts for.
 --- @param recompute_ui ? boolean Whether to recompute the virtual texts UI. Defaults to false.
---- @return table The list of virtual texts.
---- @return table The list of virtual lines.
+--- @return table<string,string[]>[] The list of virtual texts.
+--- @return table<string,string[]>[] The list of virtual lines.
 --- @return number The offset of the virtual text.
 --- @return boolean Show extmark above or below
 local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
@@ -850,6 +706,7 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 		ui,
 		1,
 		msgs[above_instead and size or 1],
+		---@diagnostic disable-next-line: param-type-mismatch
 		severity,
 		wrap_length,
 		size == 1,
@@ -876,6 +733,7 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 				ui,
 				size - i + 1,
 				msgs[i],
+				---@diagnostic disable-next-line: param-type-mismatch
 				severity,
 				wrap_length,
 				i == 1,
@@ -902,6 +760,7 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 					ui,
 					i,
 					msgs[i],
+					---@diagnostic disable-next-line: param-type-mismatch
 					severity,
 					wrap_length,
 					i == size,
@@ -930,32 +789,32 @@ end
 --- Cleans diagnostics for a buffer.
 ---
 --- @param bufnr integer The buffer number.
---- @param lines_or_diagnostic number|table|boolean|nil Specifies the lines or diagnostic to clean, If nil,
+--- @param target number|table|boolean|nil Specifies the lines or diagnostic to clean, If nil,
 --- do nothin
 ---   - If a number (line number): Clears diagnostics at the specified line.
 ---   - If a table:
----     - If `lines_or_diagnostic` is `vim.Diagnostic`: Clears diagnostic.
----     - If `lines_or_diagnostic` is an array of numbers: Clears diagnostics at each line number in the array.
----     - Optional `lines_or_diagnostic.range`: Clears diagnostics within the specified range `[start, end]`.
+---     - If `target` is `vim.Diagnostic`: Clears diagnostic.
+---     - If `target` is an array of numbers: Clears diagnostics at each line number in the array.
+---     - Optional `target.range`: Clears diagnostics within the specified range `[start, end]`.
 ---
 --- @return boolean Returns `true` if any diagnostics were cleared, `false` if none were cleared, or `nil`.
-M.clean_diagnostics = function(bufnr, lines_or_diagnostic)
-	if not lines_or_diagnostic then
+M.clean_diagnostics = function(bufnr, target)
+	if not target then
 		return false
-	elseif type(lines_or_diagnostic) == "number" then
-		return api.nvim_buf_del_extmark(bufnr, ns, lines_or_diagnostic)
-	elseif type(lines_or_diagnostic) == "table" then -- clean all diagnostics at line numbers
-		if lines_or_diagnostic.lnum then
-			return api.nvim_buf_del_extmark(bufnr, ns, lines_or_diagnostic.lnum + 1)
+	elseif type(target) == "number" then
+		return api.nvim_buf_del_extmark(bufnr, ns, target)
+	elseif type(target) == "table" then -- clean all diagnostics at line numbers
+		if target.lnum then
+			return api.nvim_buf_del_extmark(bufnr, ns, target.lnum + 1)
 		end
 
 		local cleared = 0
-		for _, line in ipairs(lines_or_diagnostic) do
+		for _, line in ipairs(target) do
 			if api.nvim_buf_del_extmark(bufnr, ns, line) then
 				cleared = cleared + 1
 			end
 		end
-		local range = lines_or_diagnostic.range
+		local range = target.range
 		if type(range) == "table" then
 			api.nvim_buf_clear_namespace(bufnr, ns, range[0] or 0, range[1] or -1)
 			return true
@@ -970,9 +829,9 @@ end
 --- Displays a diagnostic for a buffer, optionally cleaning existing diagnostics before showing the new one.
 --- This function sets virtual text and lines for the diagnostic and highlights the line where the diagnostic is shown.
 --- The line where the diagnostic is shown is also the start line of the diagnostic.
---- @param opts ? table Options for displaying the diagnostic. If not provided, the default options are used.
+--- @param opts ? Config Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
---- @param diagnostic table The diagnostic to show.
+--- @param diagnostic vim.Diagnostic The diagnostic to show.
 --- @param clean_opts  boolean|number|table|nil Options for cleaning diagnostics before showing the new one.
 ---                     If a number is provided, it is treated as an extmark ID to delete.
 ---                     If a table is provided, it should contain line numbers or a range to clear.
@@ -983,9 +842,11 @@ M.show_diagnostic = function(opts, bufnr, diagnostic, clean_opts, recompute_ui)
 	if clean_opts then
 		M.clean_diagnostics(bufnr, clean_opts)
 	end
-	opts = opts or default_options
+	opts = opts or config.get()
+
 	local virt_text, virt_lines, offset, above_instead = generate_virtual_texts(opts, bufnr, diagnostic, recompute_ui)
 	local virtline = diagnostic.lnum
+
 	local max_buf_line = api.nvim_buf_line_count(bufnr)
 	if virtline + 1 > max_buf_line then
 		virtline = max_buf_line
@@ -1007,7 +868,7 @@ end
 
 --- Shows the highest severity diagnostic at the line for a buffer, optionally cleaning existing diagnostics before showing the new one.
 ---
---- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
+--- @param opts ? Config Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param current_line  integer The current line number. Defaults to the cursor line.
 --- @param recompute_diags  boolean|nil Computes the diagnostics if true else uses the cache diagnostics. Defaults to false.
@@ -1031,7 +892,7 @@ end
 
 --- Shows the highest severity diagnostic at the cursor position in a buffer.
 ---
---- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
+--- @param opts ? Config Options for displaying the diagnostic. If not provided, the default options are used.
 --- @param bufnr integer The buffer number.
 --- @param current_line ? integer The current line number. Defaults to the cursor line.
 --- @param current_col ? integer The current column number. Defaults to the cursor column.
@@ -1056,13 +917,25 @@ M.show_cursor_diagnostic = function(opts, bufnr, current_line, current_col, reco
 	return shown_line, shown_diagnostic, diags, diags_size
 end
 
+--- Retrieves the line number to show for a diagnostic.
+--- @param diagnostic vim.Diagnostic The diagnostic to get the line number for.
+--- @return integer The line number to show the diagnostic on.
 M.get_shown_line_num = function(diagnostic)
 	return diagnostic.lnum + 1
 end
 
+--- Invokes a callback function when the plugin is enabled for a buffer.
+--- @param bufnr integer The buffer number.
+--- @param cb function The function to call when the buffer is enabled.
+M.when_enabled = function(bufnr, cb)
+	if not buffers_disabled[bufnr] then
+		cb()
+	end
+end
+
 --- Sets up diagnostic virtual text for a buffer.
 --- @param bufnr integer The buffer number.
---- @param opts table|nil Options for displaying the diagnostic. If not provided, the default options are used.
+--- @param opts ? Config Options for displaying the diagnostic. If not provided, the default options are used.
 M.setup_buf = function(bufnr, opts)
 	if buffers_attached[bufnr] then
 		return
@@ -1075,7 +948,7 @@ M.setup_buf = function(bufnr, opts)
 	buffers_attached[bufnr] = true
 
 	local autocmd_group = api.nvim_create_augroup(make_group_name(bufnr), { clear = true })
-	opts = opts and vim.tbl_deep_extend("force", default_options, opts) or default_options
+	opts = config.get(opts)
 
 	local prev_line = 1 -- The previous line that cursor was on.
 	local text_changing = false
@@ -1088,9 +961,9 @@ M.setup_buf = function(bufnr, opts)
 		diagnostics_cache.update(bufnr)
 	end
 
-	--- @param lines_or_diagnostic number|table|boolean|nil Specifies the lines or diagnostic to clean, If nil, do nothing
-	local clean_diagnostics = function(lines_or_diagnostic)
-		M.clean_diagnostics(bufnr, lines_or_diagnostic)
+	--- @param target number|table|boolean|nil Specifies the lines or diagnostic to clean, If nil, do nothing
+	local clean_diagnostics = function(target)
+		M.clean_diagnostics(bufnr, target)
 	end
 
 	local disable = function()
@@ -1102,7 +975,7 @@ M.setup_buf = function(bufnr, opts)
 		clean_diagnostics(true)
 	end
 
-	--- @param diagnostic table The diagnostic to show.
+	--- @param diagnostic vim.Diagnostic The diagnostic to show.
 	--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
 	local show_diagnostic = function(diagnostic, recompute_ui)
 		if diagnostic then
@@ -1133,7 +1006,6 @@ M.setup_buf = function(bufnr, opts)
 
 	--- @param line integer The line number to show the top severity diagnostic for.
 	--- @param recompute_ui ? boolean Whether to recompute the ui of the diagnostics. Defaults to false.
-	--- @return integer The line number where the diagnostic was shown.
 	local show_top_severity_diagnostic = function(line, recompute_ui)
 		return M.show_top_severity_diagnostic(opts, bufnr, line, false, false, recompute_ui)
 	end
@@ -1143,7 +1015,7 @@ M.setup_buf = function(bufnr, opts)
 	local show_diagnostics = function(current_line, current_col, recompute_ui)
 		clean_diagnostics(true)
 		local shown_lines = {}
-		for line, _ in meta_pairs(diagnostics_cache[bufnr]) do
+		for line, _ in diagnostics_cache[bufnr].pairs() do
 			if not shown_lines[line] then
 				shown_lines[line] = true
 				if line == current_line then
@@ -1156,10 +1028,7 @@ M.setup_buf = function(bufnr, opts)
 	end
 
 	local function when_enabled(cb)
-		if buffers_disabled[bufnr] then
-			return
-		end
-		cb()
+		M.when_enabled(bufnr, cb)
 	end
 
 	autocmd("DiagnosticChanged", {
