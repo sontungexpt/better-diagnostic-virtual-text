@@ -617,7 +617,8 @@ local evaluate_extmark = function(ui_opts, line_num)
 	local text_area_width = window_info.width - window_info.textoff
 	local line_text = line_num and api.nvim_buf_get_lines(0, line_num - 1, line_num, false)[1]
 		or api.nvim_get_current_line()
-	local offset = strdisplaywidth(line_text) - fn.winsaveview().leftcol
+	local leftcol = fn.winsaveview().leftcol
+	local offset = strdisplaywidth(line_text) - leftcol
 
 	-- Minimum length to be able to create beautiful virtual text
 	-- Get the text_area_width in case the window is too narrow
@@ -636,7 +637,7 @@ local evaluate_extmark = function(ui_opts, line_num)
 	local arrow_length
 	if should_display_below then
 		local indent_space, only_space = count_indent_spaces(line_text)
-		offset = only_space and 0 or indent_space
+		offset = only_space and 0 or leftcol > indent_space and 0 or indent_space - leftcol
 		free_space = text_area_width
 		arrow_length = up_arrow_length
 	else
