@@ -4,10 +4,10 @@ local M = {}
 --- @field wrap_line_after integer|boolean  Wrap the line after this length to avoid the virtual text is too long
 --- @field left_kept_space integer The number of spaces kept on the left side of the virtual text, make sure it enough to custom for each line
 --- @field right_kept_space integer The number of spaces kept on the right side of the virtual text, make sure it enough to custom for each line
---- @field arrow string The arrow symbol if the virtual text is in the current line
---- @field up_arrow string The arrow symbol if the virtual text is below the current line
---- @field down_arrow string The arrow symbol if the virtual text is above the current line
---- @field above boolean The virtual text is above the current line
+--- @field arrow  string The arrow symbol if the virtual text is in the current line
+--- @field up_arrow  string The arrow symbol if the virtual text is below the current line
+--- @field down_arrow  string The arrow symbol if the virtual text is above the current line
+--- @field above  boolean The virtual text is above the current line
 
 --- @class Config Config options
 --- @field ui UIConfig The UI configuration
