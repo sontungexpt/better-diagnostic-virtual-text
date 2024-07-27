@@ -12,10 +12,9 @@ local next = next
 ---  [`vim.Diagnostic`] = vim.Diagnostic,
 ---}
 
---- @class BufferDiagnostic
+--- @class BufferDiagnostic The diagnostics in a buffer
 --- @field public [number] table<integer, LineDiagnostic> The diagnostics in the buffer
 --- @field public raw function Return the raw buffer cache
---- @see LineDiagnostic
 --- ex:
 --- {
 ---  [`1`] = {
@@ -31,11 +30,11 @@ local next = next
 --- }
 ---
 
-local BufferCache = {}
+local Buffer = {}
 
 --- Create a new buffer diagnostic cache.
 --- @return BufferDiagnostic The new buffer diagnostic
-BufferCache.new = function()
+Buffer.new = function()
 	local buffer = {}
 
 	---@type BufferDiagnostic
@@ -61,19 +60,18 @@ BufferCache.new = function()
 
 		--- Tracks the existence of diagnostics for a buffer at a line.
 		--- @param line integer The lnum of the diagnostic being tracked in 1-based index. It's also the line where the diagnostic is located in the buffer
-		--- @param diagnostic table The diagnostic being tracked
+		--- @param diagnostic vim.Diagnostic|vim.Diagnostic[]|nil The diagnostic being tracked
 		__newindex = function(t, line, diagnostic)
 			if diagnostic == nil or not next(diagnostic) then
 				-- Untrack this line if `diagnostic` is nil or an empty table.
 				local diags = buffer[line]
 				if diags then
-					diags[0] = nil
-					for _, d in pairs(diags) do
-						---@diagnostic disable-next-line: undefined-field
-						local lnum, end_lnum = d.lnum + 1, d.end_lnum + 1
-						-- The line is the original line of the diagnostic so we need to remove all related lines
-						-- If not the diagnostic still exists and should not be removed
+					for _, d in diags.pairs() do
+						local lnum = d.lnum + 1
 						if line == lnum then
+							local end_lnum = d.end_lnum + 1
+							-- The line is the original line of the diagnostic so we need to remove all related lines
+							-- If not the diagnostic still exists and should not be removed
 							for i = lnum, end_lnum do
 								local diags_i = buffer[i]
 								if diags_i and diags_i[d] and (diags_i[0] or 0) > 1 then
@@ -152,4 +150,4 @@ BufferCache.new = function()
 	})
 end
 
-return BufferCache
+return Buffer

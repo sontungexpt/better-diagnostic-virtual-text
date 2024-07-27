@@ -58,7 +58,7 @@ do
 
 	--- Inspects the diagnostics cache for debugging purposes.
 	--- @return table: A clone of the diagnostics cache.
-	function diagnostics_cache.inspect()
+	diagnostics_cache.inspect = function()
 		local clone_table = {}
 		for bufnr, diagnostics in pairs(real_diagnostics_cache) do
 			clone_table[bufnr] = diagnostics.raw()
@@ -69,7 +69,7 @@ do
 	--- Iterates through each line of diagnostics in a specified buffer and invokes a callback function for each line.
 	--- @param bufnr integer The buffer number for which to iterate through diagnostics.
 	--- @param callback fun(lnum: integer, diagnostics: table<vim.Diagnostic, vim.Diagnostic>)
-	function diagnostics_cache.foreach_line(bufnr, callback)
+	diagnostics_cache.foreach_line = function(bufnr, callback)
 		local buf_diagnostics = real_diagnostics_cache[bufnr]
 		if not buf_diagnostics then
 			return
@@ -90,14 +90,14 @@ do
 
 	--- Check if the diagnostics cache exist for a buffer
 	--- @param bufnr integer The buffer number
-	function diagnostics_cache.exist(bufnr)
+	diagnostics_cache.exist = function(bufnr)
 		return real_diagnostics_cache[bufnr] ~= nil
 	end
 
 	--- Update the diagnostics cache for a buffer.
 	--- @param bufnr integer The buffer number.
 	--- @param diagnostics ? vim.Diagnostic[] The list of diagnostics to update. If not provided it will get all diagnostics of current bufnr
-	function diagnostics_cache.update(bufnr, diagnostics)
+	diagnostics_cache.update = function(bufnr, diagnostics)
 		extmark_cache[bufnr] = {}
 		real_diagnostics_cache[bufnr] = nil -- no need to call __newindex from the diagnostics_cache
 		local exists_diags_bufnr = diagnostics_cache[bufnr]
@@ -110,7 +110,7 @@ do
 	--- @param bufnr integer The buffer number
 	--- @param line integer The line number
 	--- @param diagnostic vim.Diagnostic The new diagnostic to add to cache, or a list to update the line
-	function diagnostics_cache.update_line(bufnr, line, diagnostic)
+	diagnostics_cache.update_line = function(bufnr, line, diagnostic)
 		diagnostics_cache[bufnr][line] = diagnostic
 	end
 
@@ -121,12 +121,12 @@ do
 		end,
 
 		--- @param bufnr integer The buffer number being accessed
-		--- @return table The table of diagnostics for the buffer
+		--- @return table: The table of diagnostics for the buffer
 		__index = function(_, bufnr)
 			if real_diagnostics_cache[bufnr] then
 				return real_diagnostics_cache[bufnr]
 			else
-				local buffer = require("better-diagnostic-virtual-text.BufferCache").new()
+				local buffer = require("better-diagnostic-virtual-text.Buffer").new()
 				real_diagnostics_cache[bufnr] = buffer
 				return buffer
 			end

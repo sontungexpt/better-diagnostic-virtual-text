@@ -34,7 +34,7 @@ local default = {
 --- Copies all key-value pairs from the input table `tbl` to a new table.
 --- If `tbl` contains nested tables, they are shallow cloned recursively.
 --- @param tbl table The table to clone.
---- @return table A new table containing shallow copies of all key-value pairs from `tbl`.
+--- @return table: A new table containing shallow copies of all key-value pairs from `tbl`.
 local function clone(tbl)
 	local clone_tbl = {}
 	if type(tbl) == "table" then
@@ -54,9 +54,9 @@ end
 --- @param t1 table The destination table to merge into.
 --- @param t2 table The source table to merge from.
 --- @param force boolean Optional. If `true`, overwrites `t1` with `t2` even if `t1` is not `nil`.
---- @return table The merged table `t1`.
+--- @return table: The merged table `t1`.
 local function merge(t1, t2, force)
-	if type(t1) == "table" then
+	if type(t1) == "table" and type(t2) == "table" then
 		for k, v in pairs(t2) do
 			t1[k] = merge(t1[k], v, force)
 		end
@@ -66,9 +66,9 @@ local function merge(t1, t2, force)
 	return t1
 end
 
---- Setup the config.
+--- Gets the merged options from the default options and the user options.
 --- @param user_options ? Config The user options.
---- @return table The merged options.
+--- @return table: The merged options.
 M.get = function(user_options)
 	return user_options and merge(clone(default), user_options, true) or default
 end
