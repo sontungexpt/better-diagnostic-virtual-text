@@ -1,0 +1,7 @@
+--- @class ExtmarkRemovedPart  The removed parts of a extmark
+--- @field public [1] string  -- right_kept_space
+--- @field public [2] string -- left_kept_space
+--- @field public [3] string -- arrow
+--- @field public right_kept_space boolean -- check if right_kept_space is removed
+--- @field public left_kept_space boolean -- check if left_kept_space is removed
+--- @field public arrow boolean -- check if arrow is removed

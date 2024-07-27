@@ -1,6 +1,4 @@
 local next = next
----- @field public real fun(): table<table|integer, vim.Diagnostic> @This function is used to inspect the diagnostics cache for debug
----- @field public __pairs fun(): fun():table<table|integer, vim.Diagnostic> @This function is used to iterate over the diagnostics cache
 
 ---@class LineDiagnostic The diagnostics in a line
 ---@field public [0] integer The number of diagnostics in the line

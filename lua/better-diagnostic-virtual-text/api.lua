@@ -492,7 +492,7 @@ end
 --- @param ui_opts UIConfig - The table of UI options.
 --- @param line_idx number - The index of the current line (1-based). It start from the cursor line to above or below depend on the above option.
 --- @param line_msg string - The message to display on the line.
---- @param severity vim.diagnostic.Severity - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
+--- @param severity ? vim.diagnostic.Severity - The severity level of the diagnostic (1 = Error, 2 = Warn, 3 = Info, 4 = Hint).
 --- @param max_line_length number - The maximum length of the line.
 --- @param lasted_line boolean - Whether this is the last line of the diagnostic message. Please check line_idx == 1 to know the first line before checking lasted_line because the first line can be the lasted line if the message has only one line.
 --- @param virt_text_offset number - The offset for virtual text positioning.
@@ -617,7 +617,7 @@ local evaluate_extmark = function(ui_opts, line_num)
 	local text_area_width = window_info.width - window_info.textoff
 	local line_text = line_num and api.nvim_buf_get_lines(0, line_num - 1, line_num, false)[1]
 		or api.nvim_get_current_line()
-	local offset = strdisplaywidth(line_text)
+	local offset = strdisplaywidth(line_text) - fn.winsaveview().leftcol
 
 	-- Minimum length to be able to create beautiful virtual text
 	-- Get the text_area_width in case the window is too narrow
@@ -687,11 +687,11 @@ end
 --- @return number The offset of the virtual text.
 --- @return boolean Show extmark above or below
 local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
-	local ui = opts.ui
+	local ui_opts = opts.ui
 	local should_display_below, offset, wrap_length, removed_parts, msgs, size
 	local cache = extmark_cache[bufnr][diagnostic]
 	if recompute_ui or not cache then
-		should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui, diagnostic.lnum + 1)
+		should_display_below, offset, wrap_length, removed_parts = evaluate_extmark(ui_opts, diagnostic.lnum + 1)
 		msgs, size = wrap_text(diagnostic.message, wrap_length)
 		extmark_cache[bufnr][diagnostic] = { should_display_below, offset, wrap_length, removed_parts, msgs, size }
 	else
@@ -700,13 +700,12 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 	end
 
 	local severity = diagnostic.severity
-	local above_instead = diagnostic.lnum > 0 and ui.above -- force below if on top of buffer
+	local above_instead = diagnostic.lnum > 0 and ui_opts.above -- force below if on top of buffer
 
 	local virt_text = M.format_line_chunks(
-		ui,
+		ui_opts,
 		1,
 		msgs[above_instead and size or 1],
-		---@diagnostic disable-next-line: param-type-mismatch
 		severity,
 		wrap_length,
 		size == 1,
@@ -730,10 +729,9 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 	if above_instead then
 		for i = 1, size - 1 do -- -1 for virt_text
 			virt_lines[i] = M.format_line_chunks(
-				ui,
+				ui_opts,
 				size - i + 1,
 				msgs[i],
-				---@diagnostic disable-next-line: param-type-mismatch
 				severity,
 				wrap_length,
 				i == 1,
@@ -757,10 +755,9 @@ local generate_virtual_texts = function(opts, bufnr, diagnostic, recompute_ui)
 			tbl_insert(
 				virt_lines,
 				M.format_line_chunks(
-					ui,
+					ui_opts,
 					i,
 					msgs[i],
-					---@diagnostic disable-next-line: param-type-mismatch
 					severity,
 					wrap_length,
 					i == size,
@@ -1112,7 +1109,7 @@ M.setup_buf = function(bufnr, opts)
 	})
 
 	-- Attach to the buffer to rerender diagnostics virtual text when the window is resized.
-	autocmd({ "WinScrolled", "WinLeave" }, {
+	autocmd({ "WinScrolled" }, {
 		buffer = bufnr,
 		group = autocmd_group,
 		callback = function()
