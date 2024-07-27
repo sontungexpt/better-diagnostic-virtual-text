@@ -1109,7 +1109,7 @@ M.setup_buf = function(bufnr, opts)
 	})
 
 	-- Attach to the buffer to rerender diagnostics virtual text when the window is resized.
-	autocmd({ "WinScrolled", "WinEnter" }, {
+	autocmd({ "WinScrolled" }, {
 		buffer = bufnr,
 		group = autocmd_group,
 		callback = function()
